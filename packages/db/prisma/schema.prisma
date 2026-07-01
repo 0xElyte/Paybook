@@ -1,0 +1,309 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  owner
+  payer
+  both
+}
+
+enum DurationUnit {
+  days
+  weeks
+  months
+  years
+}
+
+enum RepaymentType {
+  one_time
+  part_payment
+  installment
+}
+
+enum CollectionStatus {
+  active
+  paused
+  closed
+}
+
+enum EnrollmentStatus {
+  active
+  exit_pending
+  exited
+  removed
+}
+
+enum ExitInitiator {
+  payer
+  owner
+}
+
+enum InstallmentStatus {
+  pending
+  partial
+  paid
+  overdue
+}
+
+enum MatchStatus {
+  matched
+  unmatched
+  disputed
+}
+
+enum AnnouncementTarget {
+  all
+  selected
+}
+
+enum NotificationType {
+  payment_received
+  payment_due
+  payment_overdue
+  exit_request
+  exit_revoked
+  exit_finalized
+  announcement
+  payer_joined
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id             String   @id @default(uuid())
+  email          String   @unique
+  phone          String
+  fullName       String
+  passwordHash   String
+  role           UserRole @default(payer)
+  nombaAccountId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  ownedCollections       Collection[]            @relation("CollectionOwner")
+  bankAccounts           BankAccount[]
+  enrollments            Enrollment[]            @relation("EnrollmentPayer")
+  notifications          Notification[]
+  createdInviteLinks     InviteLink[]            @relation("InviteLinkCreator")
+  announcements          Announcement[]          @relation("AnnouncementOwner")
+  announcementRecipients AnnouncementRecipient[]
+}
+
+model BankAccount {
+  id            String   @id @default(uuid())
+  userId        String
+  bankName      String
+  bankCode      String
+  accountNumber String
+  accountName   String
+  createdAt     DateTime @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  enrollments Enrollment[]
+
+  // Prevent same user registering the same account twice
+  @@unique([accountNumber, bankCode, userId])
+}
+
+model Collection {
+  id            String           @id @default(uuid())
+  ownerId       String
+  name          String
+  description   String?
+  chargeAmount  Decimal          @db.Decimal(18, 2)
+  durationValue Int
+  durationUnit  DurationUnit
+  repaymentType RepaymentType
+  status        CollectionStatus @default(active)
+
+  // Nomba fields — populated after virtual account provisioning
+  // NOTE: no per-Collection sub-account ID. One sub-account is pre-provisioned per hackathon
+  // participant and stored as env var NOMBA_SUB_ACCOUNT_ID (path param on virtual account creation).
+  nombaAccountRef String  @unique // = this collection's id; stable join key between our DB and Nomba
+  nombaAccountNo  String?
+  nombaBankName   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner         User           @relation("CollectionOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  installments  Installment[]
+  inviteLinks   InviteLink[]
+  enrollments   Enrollment[]
+  transactions  Transaction[]
+  announcements Announcement[]
+}
+
+model Installment {
+  id            String       @id @default(uuid())
+  collectionId  String
+  sequenceIndex Int
+  percentage    Decimal      @db.Decimal(8, 4) // e.g. 40.0000; must sum to exactly 100 per collection
+  dueAfterValue Int
+  dueAfterUnit  DurationUnit
+  createdAt     DateTime     @default(now())
+
+  collection        Collection        @relation(fields: [collectionId], references: [id], onDelete: Restrict)
+  payerInstallments PayerInstallment[]
+
+  @@unique([collectionId, sequenceIndex])
+}
+
+model InviteLink {
+  id           String    @id @default(uuid())
+  collectionId String
+  token        String    @unique
+  maxUses      Int?      // NULL = "Any" (unlimited)
+  usedCount    Int       @default(0)
+  expiresAt    DateTime  // always createdAt + 24 hours, no exceptions
+  createdById  String
+  isActive     Boolean   @default(true)
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Restrict)
+  createdBy  User       @relation("InviteLinkCreator", fields: [createdById], references: [id], onDelete: Restrict)
+}
+
+model Enrollment {
+  id            String           @id @default(uuid())
+  collectionId  String
+  payerId       String
+  bankAccountId String
+  joinedAt      DateTime         // cycle start; set at successful onboarding via invite link
+  status        EnrollmentStatus @default(active)
+
+  // Exit flow state machine
+  exitRequestedBy ExitInitiator?
+  exitRequestedAt DateTime?
+  exitDueAt       DateTime?      // always exitRequestedAt + 7 days
+  exitRevokedAt   DateTime?
+  exitedAt        DateTime?
+
+  // Running balance (one_time / part_payment only; installment types track per PayerInstallment)
+  totalPaid     Decimal @default(0) @db.Decimal(18, 2)
+  creditBalance Decimal @default(0) @db.Decimal(18, 2) // overpayment with nowhere to roll into
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  collection        Collection        @relation(fields: [collectionId], references: [id], onDelete: Restrict)
+  payer             User              @relation("EnrollmentPayer", fields: [payerId], references: [id], onDelete: Restrict)
+  bankAccount       BankAccount       @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  payerInstallments PayerInstallment[]
+  transactions      Transaction[]
+
+  // A payer can only be enrolled once per collection
+  @@unique([collectionId, payerId])
+}
+
+model PayerInstallment {
+  id            String            @id @default(uuid())
+  enrollmentId  String
+  installmentId String
+  dueAt         DateTime          // = enrollment.joinedAt + installment.dueAfter
+  amountDue     Decimal           @db.Decimal(18, 2) // = installment.percentage / 100 * collection.chargeAmount
+  amountPaid    Decimal           @default(0) @db.Decimal(18, 2)
+  status        InstallmentStatus @default(pending)
+  paidAt        DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  enrollment  Enrollment  @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  installment Installment @relation(fields: [installmentId], references: [id], onDelete: Restrict)
+}
+
+model Transaction {
+  id           String  @id @default(uuid())
+  collectionId String
+  enrollmentId String? // null if unmatched
+  payerId      String? // denormalized for query convenience; null if unmatched
+
+  // Nomba webhook fields — stored verbatim from payload
+  nombaRequestId      String  @unique // idempotency anchor; checked before every write
+  amount              Decimal @db.Decimal(18, 2) // stored in NGN (converted from kobo at ingestion)
+  senderAccountNumber String
+  senderName          String
+  senderBank          String
+  narration           String?
+  paidAt              DateTime // from webhook payload timestamp
+
+  // Reconciliation
+  matchStatus          MatchStatus
+  matchedAt            DateTime?
+  appliedToOverpayment Boolean     @default(false)
+
+  // Stretch goal fields (reconciliation cron) — only populate if that feature is built
+  merchantTxRef String?   @unique
+  reconciled    Boolean   @default(false)
+  reconciledAt  DateTime?
+
+  createdAt DateTime @default(now())
+
+  collection Collection  @relation(fields: [collectionId], references: [id], onDelete: Restrict)
+  enrollment Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+}
+
+model Announcement {
+  id           String             @id @default(uuid())
+  collectionId String
+  ownerId      String
+  title        String
+  body         String
+  target       AnnouncementTarget
+  createdAt    DateTime           @default(now())
+
+  collection Collection             @relation(fields: [collectionId], references: [id], onDelete: Restrict)
+  owner      User                   @relation("AnnouncementOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  recipients AnnouncementRecipient[]
+}
+
+model AnnouncementRecipient {
+  id             String    @id @default(uuid())
+  announcementId String
+  payerId        String
+  readAt         DateTime?
+  notifSentAt    DateTime?
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Restrict)
+  payer        User         @relation(fields: [payerId], references: [id], onDelete: Restrict)
+
+  @@unique([announcementId, payerId])
+}
+
+model Notification {
+  id            String           @id @default(uuid())
+  userId        String
+  type          NotificationType
+  title         String
+  body          String
+  referenceId   String?          // points to relevant record (Transaction, Enrollment, etc.)
+  referenceType String?          // e.g. "transaction", "enrollment", "announcement"
+  readAt        DateTime?
+  createdAt     DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, readAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}

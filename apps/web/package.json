@@ -1,0 +1,43 @@
+{
+  "name": "@paybook/web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@auth/prisma-adapter": "^2.10.0",
+    "@paybook/db": "*",
+    "@prisma/client": "^6.10.1",
+    "@supabase/supabase-js": "^2.50.0",
+    "@upstash/redis": "^1.35.0",
+    "bcryptjs": "^3.0.2",
+    "bullmq": "^5.56.3",
+    "next": "^15.3.4",
+    "next-auth": "^5.0.0-beta.28",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "resend": "^4.6.0",
+    "web-push": "^3.6.7",
+    "zod": "^3.25.64"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.10",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^24.0.4",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.5",
+    "@types/web-push": "^3.6.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.511.0",
+    "postcss": "^8.5.6",
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss": "^4.1.10",
+    "typescript": "^5.8.3"
+  }
+}

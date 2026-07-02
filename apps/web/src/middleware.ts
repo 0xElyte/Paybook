@@ -19,7 +19,7 @@ export default auth((req) => {
   }
 
   if (isAuthenticated && isPublicRoute) {
-    return NextResponse.redirect(new URL('/owner/collections', req.nextUrl.origin))
+    return NextResponse.redirect(new URL('/', req.nextUrl.origin))
   }
 
   return NextResponse.next()

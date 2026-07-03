@@ -1,11 +1,19 @@
 import 'dotenv/config'
 import express from 'express'
 import { prisma } from '@paybook/db'
+import { nombaRouter } from './routes/nomba'
 
 const app = express()
 const PORT = process.env.PORT ?? 3001
 
-app.use(express.json())
+// Global JSON parser for every route except the webhook — that one needs the
+// raw body preserved for HMAC signature verification (see routes/nomba.ts).
+app.use((req, res, next) => {
+  if (req.path === '/webhooks/nomba') return next()
+  express.json()(req, res, next)
+})
+
+app.use('/webhooks', nombaRouter)
 
 app.get('/health', async (_req, res) => {
   try {

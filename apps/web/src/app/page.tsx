@@ -54,9 +54,10 @@ export default async function HomePage() {
         ) : (
           <div className="grid gap-3">
             {collections.map((collection) => (
-              <div
+              <Link
                 key={collection.id}
-                className="bg-white border border-gray-200 rounded-xl p-5 flex items-center justify-between"
+                href={`/collections/${collection.id}`}
+                className="bg-white border border-gray-200 rounded-xl p-5 flex items-center justify-between hover:border-green-300 hover:shadow-sm transition-all"
               >
                 <div>
                   <p className="font-medium text-gray-900">{collection.name}</p>
@@ -76,7 +77,7 @@ export default async function HomePage() {
                     <p className="text-xs text-amber-600">No virtual account</p>
                   )}
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}

@@ -5,10 +5,12 @@ import Link from 'next/link'
 import { CheckCircle2, Copy, Check } from 'lucide-react'
 
 export function SuccessScreen({
+  collectionId,
   collectionName,
   accountNumber,
   bankName,
 }: {
+  collectionId: string
   collectionName: string
   accountNumber: string
   bankName: string
@@ -51,14 +53,15 @@ export function SuccessScreen({
       </div>
 
       <p className="text-sm text-gray-500 mb-6">
-        Share this account number with your payers, or invite them directly once invite links are set up.
+        Share this account number with your payers, or generate an invite link so they can join and register their
+        own sending account.
       </p>
 
       <Link
-        href="/"
+        href={`/collections/${collectionId}`}
         className="inline-block w-full bg-green-600 text-white py-2.5 rounded-lg font-medium hover:bg-green-700 transition-colors text-sm"
       >
-        Done
+        Generate invite link
       </Link>
     </div>
   )

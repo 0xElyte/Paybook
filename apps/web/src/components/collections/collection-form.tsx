@@ -27,7 +27,9 @@ export function CollectionForm() {
 
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [result, setResult] = useState<{ name: string; accountNumber: string; bankName: string } | null>(null)
+  const [result, setResult] = useState<{ id: string; name: string; accountNumber: string; bankName: string } | null>(
+    null
+  )
 
   function handleRepaymentTypeChange(next: CollectionInput['repaymentType']) {
     setRepaymentType(next)
@@ -66,10 +68,11 @@ export function CollectionForm() {
     }
 
     const { collection } = (await res.json()) as {
-      collection: { name: string; nombaAccountNo: string; nombaBankName: string }
+      collection: { id: string; name: string; nombaAccountNo: string; nombaBankName: string }
     }
 
     setResult({
+      id: collection.id,
       name: collection.name,
       accountNumber: collection.nombaAccountNo,
       bankName: collection.nombaBankName,
@@ -78,7 +81,12 @@ export function CollectionForm() {
 
   if (result) {
     return (
-      <SuccessScreen collectionName={result.name} accountNumber={result.accountNumber} bankName={result.bankName} />
+      <SuccessScreen
+        collectionId={result.id}
+        collectionName={result.name}
+        accountNumber={result.accountNumber}
+        bankName={result.bankName}
+      />
     )
   }
 

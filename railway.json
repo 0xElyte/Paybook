@@ -1,0 +1,14 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "npm ci && npm run db:generate --workspace=@paybook/db && npm run build --workspace=@paybook/webhook-service"
+  },
+  "deploy": {
+    "startCommand": "npm run start --workspace=@paybook/webhook-service",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 100,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 5
+  }
+}

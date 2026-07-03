@@ -33,3 +33,5 @@ packages/db/node_modules/.prisma
 .idea
 
 refs/
+.vercel
+.env*

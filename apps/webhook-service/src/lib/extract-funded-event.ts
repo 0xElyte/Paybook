@@ -13,6 +13,7 @@ export interface ParsedFundedEvent {
   requestId: string | undefined
   eventType: string | undefined
   accountRef: string | undefined
+  receivingAccountNumber: string | undefined
   rawAmount: number | undefined
   senderAccountNumber: string | undefined
   senderName: string | undefined
@@ -27,11 +28,18 @@ export function parseFundedEvent(raw: Json): ParsedFundedEvent {
   return {
     requestId: raw?.requestId ?? data?.requestId ?? raw?.id,
     eventType: raw?.event_type ?? raw?.type ?? raw?.event,
+    // Preferred match key: accountRef == Collection.id (set at virtual account creation).
     accountRef:
       data?.accountRef ??
       data?.virtualAccount?.accountRef ??
       data?.aliasAccountReference ??
       data?.account?.accountRef,
+    // Fallback match key if accountRef isn't present on this payload shape:
+    // Collection.nombaAccountNo (the bank account number returned at creation time).
+    receivingAccountNumber:
+      data?.accountNumber ??
+      data?.virtualAccount?.accountNumber ??
+      data?.account?.accountNumber,
     rawAmount: data?.amount ?? data?.transactionAmount ?? data?.value,
     senderAccountNumber:
       data?.customer?.accountNumber ?? data?.sender?.accountNumber ?? data?.senderAccountNumber,

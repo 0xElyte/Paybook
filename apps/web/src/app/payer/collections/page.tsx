@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { formatNGN, formatDate } from '@/lib/utils'
 import { TopNav } from '@/components/chrome/top-nav'
+import { EmailVerificationBanner } from '@/components/chrome/email-verification-banner'
 import { AnimatedCounter } from '@/components/ui/animated-counter'
 import { StatusBadge, toneForStatus } from '@/components/ui/status-badge'
 import type { Metadata } from 'next'
@@ -73,6 +74,7 @@ export default async function PayerCollectionsPage() {
       />
 
       <main className="relative z-10 mx-auto max-w-[820px] px-6 py-8 pb-20">
+        {!session.user.emailVerified && <EmailVerificationBanner />}
         <h1 className="mb-1 text-[25px] font-extrabold tracking-tight">
           Hi {(session.user.name ?? 'there').split(' ')[0]} 👋
         </h1>

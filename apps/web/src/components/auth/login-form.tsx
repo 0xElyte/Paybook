@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import { FloatingInput } from '@/components/ui/floating-input'
@@ -38,15 +39,22 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-[18px]">
       <FloatingInput id="email" name="email" type="email" label="Email address" required autoComplete="email" />
-      <FloatingInput
-        id="password"
-        name="password"
-        type="password"
-        label="Password"
-        required
-        autoComplete="current-password"
-        error={error ?? undefined}
-      />
+      <div>
+        <FloatingInput
+          id="password"
+          name="password"
+          type="password"
+          label="Password"
+          required
+          autoComplete="current-password"
+          error={error ?? undefined}
+        />
+        <div className="mt-1.5 text-right">
+          <Link href="/forgot-password" className="text-[13px] font-bold text-green-text-2 hover:underline">
+            Forgot password?
+          </Link>
+        </div>
+      </div>
 
       <Button type="submit" variant="navy" disabled={loading} className="w-full">
         {loading ? 'Signing in…' : 'Sign in'}

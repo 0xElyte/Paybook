@@ -25,40 +25,52 @@ export async function POST(req: Request) {
 
   const collectionId = randomUUID() // generated up front so it can double as the Nomba accountRef
 
-  const collection = await prisma.$transaction(async (tx) => {
-    const created = await tx.collection.create({
-      data: {
-        id: collectionId,
-        ownerId: session.user.id,
-        name,
-        description,
-        chargeAmount,
-        durationValue,
-        durationUnit,
-        repaymentType,
-        nombaAccountRef: collectionId,
+  let collection
+  try {
+    collection = await prisma.$transaction(
+      async (tx) => {
+        const created = await tx.collection.create({
+          data: {
+            id: collectionId,
+            ownerId: session.user.id,
+            name,
+            description,
+            chargeAmount,
+            durationValue,
+            durationUnit,
+            repaymentType,
+            nombaAccountRef: collectionId,
+          },
+        })
+
+        if (repaymentType === 'installment' && installments) {
+          await tx.installment.createMany({
+            data: installments.map((installment, index) => ({
+              collectionId: created.id,
+              sequenceIndex: index,
+              percentage: installment.percentage,
+              dueAfterValue: installment.dueAfterValue,
+              dueAfterUnit: installment.dueAfterUnit,
+            })),
+          })
+        }
+
+        // First collection an owner creates flips their role from the 'payer' default.
+        if (session.user.role === 'payer') {
+          await tx.user.update({ where: { id: session.user.id }, data: { role: 'both' } })
+        }
+
+        return created
       },
-    })
-
-    if (repaymentType === 'installment' && installments) {
-      await tx.installment.createMany({
-        data: installments.map((installment, index) => ({
-          collectionId: created.id,
-          sequenceIndex: index,
-          percentage: installment.percentage,
-          dueAfterValue: installment.dueAfterValue,
-          dueAfterUnit: installment.dueAfterUnit,
-        })),
-      })
-    }
-
-    // First collection an owner creates flips their role from the 'payer' default.
-    if (session.user.role === 'payer') {
-      await tx.user.update({ where: { id: session.user.id }, data: { role: 'both' } })
-    }
-
-    return created
-  })
+      { maxWait: 8000, timeout: 15000 }
+    )
+  } catch (err) {
+    console.error('Collection creation transaction failed:', err)
+    return NextResponse.json(
+      { error: 'Could not save the collection. Please try again.' },
+      { status: 500 }
+    )
+  }
 
   try {
     const account = await createVirtualAccount({

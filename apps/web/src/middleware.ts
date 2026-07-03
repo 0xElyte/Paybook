@@ -9,8 +9,13 @@ export default auth((req) => {
   const isPublicRoute = publicRoutes.includes(pathname)
   const isInviteRoute = pathname.startsWith('/invite/')
   const isApiAuthRoute = pathname.startsWith('/api/auth')
+  // These must work regardless of auth state: reset-password/verify-email are
+  // routinely hit while already logged in (verify-email especially, since
+  // registration auto-signs-in before the link is ever clicked), and
+  // forgot-password needs to stay reachable without bouncing through login.
+  const isAuthFlowRoute = ['/forgot-password', '/reset-password', '/verify-email'].includes(pathname)
 
-  if (isApiAuthRoute || isInviteRoute) return NextResponse.next()
+  if (isApiAuthRoute || isInviteRoute || isAuthFlowRoute) return NextResponse.next()
 
   if (!isAuthenticated && !isPublicRoute) {
     const loginUrl = new URL('/login', req.nextUrl.origin)

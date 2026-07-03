@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { formatNGN } from '@/lib/utils'
 import { TopNav } from '@/components/chrome/top-nav'
+import { EmailVerificationBanner } from '@/components/chrome/email-verification-banner'
 import { AnimatedCounter } from '@/components/ui/animated-counter'
 import { MonoAccountNumber } from '@/components/ui/mono-account-number'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -88,6 +89,7 @@ export default async function HomePage() {
       />
 
       <main className="relative z-10 mx-auto max-w-[1180px] px-8 py-8 pb-20">
+        {!session?.user?.emailVerified && <EmailVerificationBanner />}
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="mb-1 text-[27px] font-extrabold tracking-tight">

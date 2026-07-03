@@ -5,27 +5,40 @@ import { useRouter } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import { FloatingInput } from '@/components/ui/floating-input'
 import { Button } from '@/components/ui/button'
+import { phoneSchema } from '@/lib/validations/phone'
 
 export function RegisterForm() {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
+  const [phoneError, setPhoneError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  function validatePhone(value: string) {
+    const result = phoneSchema.safeParse(value)
+    setPhoneError(result.success ? null : (result.error.errors[0]?.message ?? 'Invalid phone number'))
+    return result.success
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
-    setLoading(true)
 
     const formData = new FormData(e.currentTarget)
     const password = formData.get('password') as string
     const confirmPassword = formData.get('confirmPassword') as string
     const email = formData.get('email') as string
+    const phone = formData.get('phone') as string
+
+    if (!validatePhone(phone)) {
+      return
+    }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match')
-      setLoading(false)
       return
     }
+
+    setLoading(true)
 
     const res = await fetch('/api/auth/register', {
       method: 'POST',
@@ -33,7 +46,7 @@ export function RegisterForm() {
       body: JSON.stringify({
         fullName: formData.get('fullName'),
         email,
-        phone: formData.get('phone'),
+        phone,
         password,
       }),
     })
@@ -56,7 +69,17 @@ export function RegisterForm() {
     <form onSubmit={handleSubmit} className="space-y-[18px]">
       <FloatingInput id="fullName" name="fullName" type="text" label="Full name" required autoComplete="name" />
       <FloatingInput id="email" name="email" type="email" label="Email address" required autoComplete="email" />
-      <FloatingInput id="phone" name="phone" type="tel" label="Phone number" required autoComplete="tel" />
+      <FloatingInput
+        id="phone"
+        name="phone"
+        type="tel"
+        label="Phone number (e.g. 08012345678)"
+        required
+        autoComplete="tel"
+        error={phoneError ?? undefined}
+        onBlur={(e) => e.target.value && validatePhone(e.target.value)}
+        onChange={() => phoneError && setPhoneError(null)}
+      />
       <FloatingInput
         id="password"
         name="password"

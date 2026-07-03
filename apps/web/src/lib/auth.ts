@@ -41,6 +41,7 @@ const config: NextAuthConfig = {
           email: user.email,
           name: user.fullName,
           role: user.role,
+          emailVerified: user.emailVerified,
         }
       },
     }),
@@ -50,6 +51,7 @@ const config: NextAuthConfig = {
       if (user) {
         token.id = user.id
         token.role = (user as { role?: string }).role
+        token.emailVerified = (user as { emailVerified?: Date | null }).emailVerified ?? null
       }
       return token
     },
@@ -57,6 +59,7 @@ const config: NextAuthConfig = {
       if (token) {
         session.user.id = token.id as string
         session.user.role = token.role as string
+        session.user.emailVerified = (token.emailVerified as Date | null) ?? null
       }
       return session
     },

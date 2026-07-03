@@ -92,8 +92,13 @@ export function CollectionForm() {
     setSubmitting(false)
 
     if (!res.ok) {
-      const { error: msg } = (await res.json()) as { error: string }
-      setError(msg ?? 'Something went wrong')
+      // Guard against a non-JSON response (e.g. an unhandled server crash)
+      // so a bad request never surfaces as a raw runtime error to the user.
+      const msg = await res
+        .json()
+        .then((data: { error?: string }) => data.error)
+        .catch(() => null)
+      setError(msg ?? 'Something went wrong. Please try again.')
       return
     }
 

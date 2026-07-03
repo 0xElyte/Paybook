@@ -1,60 +1,256 @@
 @import "tailwindcss";
 
+@theme {
+  /* Brand */
+  --color-navy: #0f1c3f;
+  --color-navy-tint: #14264f;
+  --color-green: #00d97e;
+  --color-green-deep: #00b368;
+  --color-green-text: #04794a;
+  --color-green-text-2: #00a863;
+
+  /* Surfaces */
+  --color-surface: #f7f9fc;
+  --color-card: #ffffff;
+  --color-card-subtle: #fbfcfe;
+  --color-fill: #f2f5fa;
+  --color-fill-2: #eef2f8;
+
+  /* Status */
+  --color-amber: #f59e0b;
+  --color-amber-text: #b45309;
+  --color-blue: #3b82f6;
+  --color-blue-text: #1d4ed8;
+  --color-red: #ef4444;
+  --color-red-text: #c0392b;
+
+  /* Text */
+  --color-text: #1a2340;
+  --color-text-2: #42506f;
+  --color-text-muted: #6b7a99;
+  --color-text-faint: #a9b6d4;
+
+  /* Border */
+  --color-border: #e4e9f2;
+
+  /* Radii */
+  --radius-control: 12px;
+  --radius-card: 18px;
+  --radius-pill: 999px;
+
+  /* Fonts (bound to next/font CSS vars in layout.tsx) */
+  --font-sans: var(--font-plus-jakarta-sans), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
 @layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 142 71% 45%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 142 71% 45%;
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 142 71% 45%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 142 71% 45%;
-  }
-
   * {
     box-sizing: border-box;
-    border-color: hsl(var(--border));
   }
 
   body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
-    font-family: system-ui, -apple-system, sans-serif;
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
   }
+
+  button {
+    cursor: pointer;
+  }
+
+  ::selection {
+    background: var(--color-green);
+    color: var(--color-navy);
+  }
+}
+
+@layer utilities {
+  .shadow-card {
+    box-shadow:
+      0 1px 3px rgba(15, 28, 63, 0.05),
+      0 10px 30px rgba(15, 28, 63, 0.05);
+  }
+  .shadow-card-hover {
+    box-shadow: 0 14px 40px rgba(15, 28, 63, 0.12);
+  }
+  .shadow-navy-cta {
+    box-shadow: 0 8px 20px rgba(15, 28, 63, 0.22);
+  }
+  .shadow-green-cta {
+    box-shadow: 0 8px 22px rgba(0, 217, 126, 0.35);
+  }
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@keyframes routeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes shimmer {
+  0% {
+    background-position: -450px 0;
+  }
+  100% {
+    background-position: 450px 0;
+  }
+}
+@keyframes pulseDot {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+@keyframes pulseBadge {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-7px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+@keyframes popIn {
+  0% {
+    transform: scale(0);
+  }
+  70% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes drawerIn {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes floatUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes revealSweep {
+  0% {
+    background-position: -220px 0;
+  }
+  100% {
+    background-position: 320px 0;
+  }
+}
+@keyframes ripple {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+@keyframes rowFlash {
+  0% {
+    background: rgba(0, 217, 126, 0.22);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.animate-route-in {
+  animation: routeIn 0.24s ease-out both;
+}
+.animate-card-in {
+  animation: cardIn 0.5s ease-out forwards;
+}
+.animate-shimmer {
+  background: linear-gradient(90deg, #eef2f8 25%, #f6f9fc 50%, #eef2f8 75%);
+  background-size: 900px 100%;
+  animation: shimmer 1.3s infinite;
+}
+.animate-pulse-dot {
+  animation: pulseDot 1.8s infinite;
+}
+.animate-pulse-badge {
+  animation: pulseBadge 1.6s infinite;
+}
+.animate-shake {
+  animation: shake 0.4s;
+}
+.animate-pop-in {
+  animation: popIn 0.5s ease-out both;
+}
+.animate-toast-in {
+  animation: toastIn 0.3s ease-out both;
+}
+.animate-drawer-in {
+  animation: drawerIn 0.24s ease-out both;
+}
+.animate-float-up {
+  animation: floatUp 0.18s ease-out both;
+}
+.animate-ripple {
+  animation: ripple 1.6s ease-out infinite;
 }

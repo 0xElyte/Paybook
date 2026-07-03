@@ -2,7 +2,12 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { UserPlus2 } from 'lucide-react'
 import { formatNGN, formatDate } from '@/lib/utils'
+import { TopNav } from '@/components/chrome/top-nav'
+import { MonoAccountNumber } from '@/components/ui/mono-account-number'
+import { StatusBadge, toneForStatus } from '@/components/ui/status-badge'
+import { Button } from '@/components/ui/button'
 
 interface InviteLink {
   id: string
@@ -61,28 +66,25 @@ interface Props {
   inviteLinks: InviteLink[]
   enrollments: Enrollment[]
   transactions: Transaction[]
+  ownerName: string
 }
 
 type Tab = 'payers' | 'transactions' | 'invite'
 
-export function CollectionDetailClient({ collection, inviteLinks, enrollments, transactions }: Props) {
+export function CollectionDetailClient({ collection, inviteLinks, enrollments, transactions, ownerName }: Props) {
   const [tab, setTab] = useState<Tab>('invite')
   const [generatingLink, setGeneratingLink] = useState(false)
   const [linkError, setLinkError] = useState<string | null>(null)
   const [localLinks, setLocalLinks] = useState<InviteLink[]>(inviteLinks)
-  const [maxUsesInput, setMaxUsesInput] = useState<string>('')
+  const [maxUsesInput, setMaxUsesInput] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
-  const totalCollected = transactions
-    .filter((tx) => tx.matchStatus === 'matched')
-    .reduce((sum, tx) => sum + tx.amount, 0)
-
+  const totalCollected = transactions.filter((tx) => tx.matchStatus === 'matched').reduce((sum, tx) => sum + tx.amount, 0)
   const unmatchedCount = transactions.filter((tx) => tx.matchStatus === 'unmatched').length
 
   async function generateInviteLink() {
     setGeneratingLink(true)
     setLinkError(null)
-
     const maxUses = maxUsesInput.trim() === '' ? null : parseInt(maxUsesInput)
 
     const res = await fetch(`/api/collections/${collection.id}/invite-links`, {
@@ -90,7 +92,6 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ maxUses }),
     })
-
     setGeneratingLink(false)
 
     if (!res.ok) {
@@ -98,15 +99,13 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
       setLinkError(data.error ?? 'Failed to generate link')
       return
     }
-
     const data = (await res.json()) as { link: InviteLink }
     setLocalLinks([data.link, ...localLinks])
     setMaxUsesInput('')
   }
 
   async function copyLink(token: string, id: string) {
-    const url = `${window.location.origin}/invite/${token}`
-    await navigator.clipboard.writeText(url)
+    await navigator.clipboard.writeText(`${window.location.origin}/invite/${token}`)
     setCopiedId(id)
     setTimeout(() => setCopiedId(null), 2000)
   }
@@ -118,274 +117,194 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
     return true
   }
 
+  const activeLink = localLinks.find(isLinkValid)
+  const hoursLeftFor = (expiresAt: string) =>
+    Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60)))
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="border-b bg-white">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold text-green-700">
-            Paybook
-          </Link>
-        </div>
-      </header>
+    <div className="relative min-h-screen">
+      <TopNav variant="owner" userName={ownerName} />
 
-      <main className="max-w-5xl mx-auto px-4 py-10">
-        <div className="flex items-center gap-2 mb-1">
-          <Link href="/" className="text-sm text-gray-500 hover:text-gray-700">
-            Collections
-          </Link>
-          <span className="text-gray-300">/</span>
-          <span className="text-sm text-gray-900 font-medium">{collection.name}</span>
-        </div>
+      <main className="relative z-10 mx-auto max-w-[1040px] px-6 py-7 pb-20">
+        <Link href="/" className="mb-[18px] flex w-fit items-center gap-1.5 text-sm font-bold text-text-2 hover:text-text">
+          ← Back to dashboard
+        </Link>
 
-        <div className="flex items-start justify-between mb-6">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{collection.name}</h1>
-            {collection.description && <p className="text-gray-500 text-sm mt-0.5">{collection.description}</p>}
-          </div>
-          <span
-            className={`text-xs font-medium px-2 py-1 rounded-full mt-1 ${
-              collection.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-            }`}
-          >
-            {collection.status}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          {[
-            { label: 'Charge', value: formatNGN(collection.chargeAmount) },
-            { label: 'Active payers', value: enrollments.length.toString() },
-            { label: 'Total collected', value: formatNGN(totalCollected) },
-            { label: 'Unmatched', value: unmatchedCount.toString() },
-          ].map(({ label, value }) => (
-            <div key={label} className="bg-white rounded-xl border border-gray-200 p-4">
-              <p className="text-xs text-gray-400 mb-1">{label}</p>
-              <p className="text-lg font-semibold text-gray-900">{value}</p>
+            <h1 className="mb-2 text-2xl font-extrabold tracking-tight">{collection.name}</h1>
+            <div className="flex items-center gap-2.5">
+              {collection.nombaAccountNo && <MonoAccountNumber accountNumber={collection.nombaAccountNo} size="sm" />}
+              <span className="text-xs text-text-faint">· {collection.nombaBankName}</span>
             </div>
-          ))}
-        </div>
-
-        {collection.nombaAccountNo && (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-500">Collection account — payers transfer here</p>
-              <p className="text-xl font-mono font-bold text-green-700 mt-0.5">{collection.nombaAccountNo}</p>
-              <p className="text-sm text-gray-600">{collection.nombaBankName}</p>
-            </div>
-            <button
-              onClick={() => navigator.clipboard.writeText(collection.nombaAccountNo!)}
-              className="text-xs text-green-600 border border-green-300 px-3 py-1.5 rounded-lg hover:bg-green-100 transition-colors"
-            >
-              Copy
-            </button>
           </div>
-        )}
-
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-4 w-fit">
-          {(['payers', 'transactions', 'invite'] as Tab[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {t === 'payers'
-                ? `Payers (${enrollments.length})`
-                : t === 'transactions'
-                  ? `Transactions (${transactions.length})`
-                  : 'Invite links'}
-            </button>
-          ))}
+          <div className="rounded-[14px] bg-navy px-5 py-3.5 text-right text-white">
+            <div className="mb-0.5 text-[11.5px] text-text-faint">Total collected</div>
+            <div className="font-mono text-xl font-extrabold text-green">{formatNGN(totalCollected)}</div>
+          </div>
         </div>
 
-        {tab === 'payers' && (
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-            {enrollments.length === 0 ? (
-              <div className="p-8 text-center text-gray-400">
-                <p className="text-3xl mb-2">👥</p>
-                <p className="text-sm">No payers yet. Generate an invite link to get started.</p>
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_300px]">
+          <div className="grid gap-5">
+            <div className="rounded-card bg-card p-1 shadow-card">
+              <div className="flex gap-1 px-4.5 pt-3">
+                {(['payers', 'transactions'] as Tab[]).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTab(t)}
+                    className={`mr-4 border-b-2 px-1 py-2 text-sm font-bold capitalize transition-colors ${
+                      tab === t ? 'border-green text-navy' : 'border-transparent text-text-muted'
+                    }`}
+                  >
+                    {t === 'payers' ? `Payers (${enrollments.length})` : `Transactions (${transactions.length})`}
+                  </button>
+                ))}
               </div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead className="border-b border-gray-100 bg-gray-50">
-                  <tr>
-                    {['Payer', 'Bank account', 'Joined', 'Total paid', 'Next installment'].map((h) => (
-                      <th key={h} className="text-left px-4 py-3 text-xs text-gray-500 font-medium">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {enrollments.map((e) => (
-                    <tr key={e.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-gray-900">{e.payerName}</p>
-                        <p className="text-gray-400 text-xs">{e.payerEmail}</p>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 text-xs">{e.bankAccount}</td>
-                      <td className="px-4 py-3 text-gray-500">{formatDate(e.joinedAt)}</td>
-                      <td className="px-4 py-3 font-medium text-gray-900">{formatNGN(e.totalPaid)}</td>
-                      <td className="px-4 py-3">
-                        {e.nextInstallment ? (
-                          <div>
-                            <span
-                              className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-                                e.nextInstallment.status === 'paid'
-                                  ? 'bg-green-100 text-green-700'
-                                  : e.nextInstallment.status === 'overdue'
-                                    ? 'bg-red-100 text-red-700'
-                                    : 'bg-amber-100 text-amber-700'
-                              }`}
-                            >
-                              {e.nextInstallment.status}
+
+              <div className="p-4.5 pt-2">
+                {tab === 'payers' &&
+                  (enrollments.length === 0 ? (
+                    <EmptyRow emoji="👥" text="No payers yet. Generate an invite link to get started." />
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[560px]">
+                        <div className="grid grid-cols-[1.4fr_0.9fr_0.9fr_0.8fr] border-b border-border px-2 py-2.5 text-xs font-bold text-text-muted">
+                          <span>Payer</span>
+                          <span>Status</span>
+                          <span className="text-right">Paid</span>
+                          <span className="text-right">Outstanding</span>
+                        </div>
+                        {enrollments.map((e) => {
+                          const outstanding = collection.chargeAmount - e.totalPaid
+                          const tone = e.nextInstallment
+                            ? toneForStatus(e.nextInstallment.status).tone
+                            : outstanding <= 0
+                              ? 'green'
+                              : 'gray'
+                          const label = e.nextInstallment ? e.nextInstallment.status : outstanding <= 0 ? 'paid' : 'pending'
+                          return (
+                            <div key={e.id} className="grid grid-cols-[1.4fr_0.9fr_0.9fr_0.8fr] items-center border-b border-fill px-2 py-3.5 transition-colors hover:bg-card-subtle">
+                              <div className="flex items-center gap-2.5">
+                                <span className="grid h-8 w-8 place-items-center rounded-full bg-fill text-xs font-bold text-text-2">
+                                  {e.payerName.slice(0, 1).toUpperCase()}
+                                </span>
+                                <div>
+                                  <div className="text-[13.5px] font-bold">{e.payerName}</div>
+                                  <div className="text-[11.5px] text-text-faint">Joined {formatDate(e.joinedAt)}</div>
+                                </div>
+                              </div>
+                              <span>
+                                <StatusBadge label={label} tone={tone} pulse={label === 'overdue'} />
+                              </span>
+                              <span className="text-right font-mono text-[13px] font-bold">{formatNGN(e.totalPaid)}</span>
+                              <span className="text-right font-mono text-[13px] font-bold text-text-muted">
+                                {formatNGN(Math.max(0, outstanding))}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+
+                {tab === 'transactions' &&
+                  (transactions.length === 0 ? (
+                    <EmptyRow emoji="💸" text="No transactions yet." />
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[560px]">
+                        <div className="grid grid-cols-[0.7fr_0.9fr_1fr_1fr_1fr] border-b border-border px-2 py-2.5 text-xs font-bold text-text-muted">
+                          <span>Date</span>
+                          <span className="text-right">Amount</span>
+                          <span>Sender</span>
+                          <span>Payer</span>
+                          <span className="text-right">Match</span>
+                        </div>
+                        {transactions.map((tx) => (
+                          <div key={tx.id} className="grid grid-cols-[0.7fr_0.9fr_1fr_1fr_1fr] items-center border-b border-fill px-2 py-3.5 text-[13px]">
+                            <span className="text-text-2">{formatDate(tx.paidAt)}</span>
+                            <span className="text-right font-mono font-bold text-green-text">{formatNGN(tx.amount)}</span>
+                            <span className="truncate text-text-muted">{tx.senderName}</span>
+                            <span className="truncate font-semibold">{tx.payerName ?? '—'}</span>
+                            <span className="text-right">
+                              <StatusBadge label={tx.matchStatus} tone={toneForStatus(tx.matchStatus).tone} />
                             </span>
-                            <p className="text-xs text-gray-400 mt-0.5">
-                              {formatNGN(e.nextInstallment.amountPaid)} / {formatNGN(e.nextInstallment.amountDue)}
-                            </p>
                           </div>
-                        ) : (
-                          <span className="text-gray-400 text-xs">—</span>
-                        )}
-                      </td>
-                    </tr>
+                        ))}
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )}
-
-        {tab === 'transactions' && (
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-            {transactions.length === 0 ? (
-              <div className="p-8 text-center text-gray-400">
-                <p className="text-3xl mb-2">💸</p>
-                <p className="text-sm">No transactions yet.</p>
               </div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead className="border-b border-gray-100 bg-gray-50">
-                  <tr>
-                    {['Amount', 'Sender', 'Payer matched', 'Date', 'Status'].map((h) => (
-                      <th key={h} className="text-left px-4 py-3 text-xs text-gray-500 font-medium">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {transactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-semibold text-gray-900">{formatNGN(tx.amount)}</td>
-                      <td className="px-4 py-3">
-                        <p className="text-gray-900">{tx.senderName}</p>
-                        <p className="text-xs text-gray-400">
-                          {tx.senderBank} — {tx.senderAccountNumber}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">{tx.payerName ?? '—'}</td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(tx.paidAt)}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                            tx.matchStatus === 'matched'
-                              ? 'bg-green-100 text-green-700'
-                              : tx.matchStatus === 'unmatched'
-                                ? 'bg-amber-100 text-amber-700'
-                                : 'bg-gray-100 text-gray-500'
-                          }`}
-                        >
-                          {tx.matchStatus}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            </div>
           </div>
-        )}
 
-        {tab === 'invite' && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-gray-200 p-5">
-              <h3 className="font-semibold text-gray-900 mb-3">Generate new invite link</h3>
-              <div className="flex gap-3 items-end">
-                <div className="flex-1">
-                  <label className="block text-xs text-gray-500 mb-1">Max payers (leave blank for unlimited)</label>
+          <div className="grid gap-4 lg:sticky lg:top-5">
+            <div className="rounded-card bg-card p-5 shadow-card">
+              <div className="mb-3.5 flex items-center gap-2">
+                <UserPlus2 size={18} />
+                <h3 className="text-[15px] font-extrabold">Invite link</h3>
+              </div>
+
+              {activeLink ? (
+                <>
+                  <div className="mb-3 rounded-[11px] bg-surface p-3.5 font-mono text-[12.5px] break-all text-text-2">
+                    {`${typeof window !== 'undefined' ? window.location.origin : ''}/invite/${activeLink.token}`}
+                  </div>
+                  <div className="mb-3.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-[12.5px] font-bold text-amber-text">
+                      ~{hoursLeftFor(activeLink.expiresAt)}h left
+                    </span>
+                    <span className="text-[12.5px] font-semibold text-text-muted">
+                      {activeLink.usedCount} / {activeLink.maxUses ?? '∞'} joined
+                    </span>
+                  </div>
+                  <Button variant="outline" onClick={() => copyLink(activeLink.token, activeLink.id)} className="h-11 w-full text-[13.5px]">
+                    {copiedId === activeLink.id ? 'Copied!' : 'Copy link'}
+                  </Button>
+                </>
+              ) : (
+                <p className="mb-3 text-[13px] text-text-muted">No active invite link. Generate one below.</p>
+              )}
+
+              <div className="mt-4 border-t border-border pt-4">
+                <label className="mb-1.5 block text-xs text-text-muted">Max payers (blank = unlimited)</label>
+                <div className="flex gap-2">
                   <input
                     type="number"
                     min={1}
                     value={maxUsesInput}
                     onChange={(e) => setMaxUsesInput(e.target.value)}
                     placeholder="Any"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="h-10 flex-1 rounded-[10px] border-[1.5px] border-border px-3 text-sm outline-none focus:border-green"
                   />
+                  <Button variant="navy" onClick={generateInviteLink} disabled={generatingLink} className="h-10 px-4 text-[13px]">
+                    {generatingLink ? '…' : 'Generate'}
+                  </Button>
                 </div>
-                <button
-                  onClick={generateInviteLink}
-                  disabled={generatingLink}
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
-                >
-                  {generatingLink ? 'Generating…' : 'Generate link'}
-                </button>
+                {linkError && <p className="mt-2 text-xs text-red-text">{linkError}</p>}
+                <p className="mt-2 text-xs text-text-faint">Links always expire after 24 hours.</p>
               </div>
-              {linkError && <p className="text-red-600 text-sm mt-2">{linkError}</p>}
-              <p className="text-xs text-gray-400 mt-2">Links always expire after 24 hours.</p>
             </div>
 
-            {localLinks.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="border-b border-gray-100 bg-gray-50">
-                    <tr>
-                      {['Link', 'Capacity', 'Used', 'Expires', 'Status', ''].map((h) => (
-                        <th key={h} className="text-left px-4 py-3 text-xs text-gray-500 font-medium">
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {localLinks.map((link) => {
-                      const valid = isLinkValid(link)
-                      return (
-                        <tr key={link.id}>
-                          <td className="px-4 py-3 font-mono text-xs text-gray-700">{link.token.slice(0, 12)}…</td>
-                          <td className="px-4 py-3 text-gray-600">{link.maxUses ?? 'Any'}</td>
-                          <td className="px-4 py-3 text-gray-600">{link.usedCount}</td>
-                          <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(link.expiresAt)}</td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                                valid ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                              }`}
-                            >
-                              {valid ? 'active' : 'expired'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            {valid && (
-                              <button
-                                onClick={() => copyLink(link.token, link.id)}
-                                className="text-xs text-green-600 hover:text-green-800 font-medium"
-                              >
-                                {copiedId === link.id ? 'Copied!' : 'Copy link'}
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+            {unmatchedCount > 0 && (
+              <div className="flex gap-2 rounded-[11px] border-l-[3px] border-amber bg-amber/[0.08] px-3.5 py-3.5">
+                <span className="text-[12.5px] leading-snug text-text-2">
+                  {unmatchedCount} unmatched transaction{unmatchedCount !== 1 ? 's' : ''} — check the Transactions tab.
+                </span>
               </div>
             )}
           </div>
-        )}
+        </div>
       </main>
+    </div>
+  )
+}
+
+function EmptyRow({ emoji, text }: { emoji: string; text: string }) {
+  return (
+    <div className="p-8 text-center text-text-faint">
+      <p className="mb-2 text-3xl">{emoji}</p>
+      <p className="text-sm">{text}</p>
     </div>
   )
 }

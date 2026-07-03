@@ -1,22 +1,32 @@
 'use client'
 
 import { useState } from 'react'
-import { durationUnits, repaymentTypes, type CollectionInput, type InstallmentInput } from '@/lib/validations/collection'
+import { useRouter } from 'next/navigation'
+import { ArrowLeft, Wallet, Layers, ListChecks } from 'lucide-react'
+import { durationUnits, type CollectionInput, type InstallmentInput } from '@/lib/validations/collection'
+import { FloatingInput, FloatingTextarea } from '@/components/ui/floating-input'
+import { Button } from '@/components/ui/button'
+import { formatNGN } from '@/lib/utils'
 import { InstallmentBuilder } from './installment-builder'
 import { SuccessScreen } from './success-screen'
 
-const repaymentLabels: Record<(typeof repaymentTypes)[number], { label: string; hint: string }> = {
-  one_time: { label: 'One-time', hint: 'Payers pay the full amount in a single transfer' },
-  part_payment: { label: 'Part payment', hint: 'Payers pay any amount, any number of times, toward the total' },
-  installment: { label: 'Installments', hint: 'Payers follow a fixed schedule of percentage-based installments' },
-}
+const repaymentTypes: { value: CollectionInput['repaymentType']; label: string; hint: string; icon: React.ReactNode }[] = [
+  { value: 'one_time', label: 'One-time', hint: 'Full amount in a single transfer', icon: <Wallet size={22} /> },
+  { value: 'part_payment', label: 'Part payment', hint: 'Any number of partial transfers', icon: <Layers size={22} /> },
+  { value: 'installment', label: 'Installments', hint: 'Fixed percentage-based schedule', icon: <ListChecks size={22} /> },
+]
 
 const defaultInstallments: InstallmentInput[] = [
   { percentage: 50, dueAfterValue: 30, dueAfterUnit: 'days' },
   { percentage: 50, dueAfterValue: 60, dueAfterUnit: 'days' },
 ]
 
+const stepLabels = ['Details', 'Repayment', 'Schedule', 'Review']
+
 export function CollectionForm() {
+  const router = useRouter()
+  const [step, setStep] = useState(1)
+
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [chargeAmount, setChargeAmount] = useState('')
@@ -31,6 +41,12 @@ export function CollectionForm() {
     null
   )
 
+  const isInstallment = repaymentType === 'installment'
+  // Map the visible step index (skipping the installment-schedule step when not applicable)
+  // onto the fixed 4-label progress bar for consistent labeling.
+  const labelIndex = !isInstallment && step === 3 ? 3 : step - 1
+  const stepPct = (labelIndex / 3) * 100
+
   function handleRepaymentTypeChange(next: CollectionInput['repaymentType']) {
     setRepaymentType(next)
     if (next === 'installment' && installments.length < 2) {
@@ -38,8 +54,22 @@ export function CollectionForm() {
     }
   }
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
+  function next() {
+    if (step === 2 && !isInstallment) {
+      setStep(4)
+      return
+    }
+    setStep((s) => Math.min(4, s + 1))
+  }
+  function back() {
+    if (step === 4 && !isInstallment) {
+      setStep(2)
+      return
+    }
+    setStep((s) => Math.max(1, s - 1))
+  }
+
+  async function handleSubmit() {
     setError(null)
     setSubmitting(true)
 
@@ -90,124 +120,205 @@ export function CollectionForm() {
     )
   }
 
+  const installmentsBalanced = Math.abs(installments.reduce((s, i) => s + i.percentage, 0) - 100) < 0.01
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      <div>
-        <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-          Collection name
-        </label>
-        <input
-          id="name"
-          required
-          minLength={3}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Ikeja Duplex Rent"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
-        />
-      </div>
-
-      <div>
-        <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-          Description <span className="text-gray-400 font-normal">(optional)</span>
-        </label>
-        <textarea
-          id="description"
-          rows={2}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="What are you collecting for?"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm resize-none"
-        />
-      </div>
-
-      <div>
-        <label htmlFor="chargeAmount" className="block text-sm font-medium text-gray-700 mb-1">
-          Charge amount (₦)
-        </label>
-        <input
-          id="chargeAmount"
-          type="number"
-          required
-          min={1}
-          step="0.01"
-          value={chargeAmount}
-          onChange={(e) => setChargeAmount(e.target.value)}
-          placeholder="500000"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Cycle length</label>
-        <div className="grid grid-cols-2 gap-3">
-          <input
-            type="number"
-            required
-            min={1}
-            value={durationValue}
-            onChange={(e) => setDurationValue(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
-          />
-          <select
-            value={durationUnit}
-            onChange={(e) => setDurationUnit(e.target.value as CollectionInput['durationUnit'])}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
-          >
-            {durationUnits.map((unit) => (
-              <option key={unit} value={unit}>
-                {unit}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Repayment type</label>
-        <div className="grid grid-cols-1 gap-2">
-          {repaymentTypes.map((type) => (
-            <label
-              key={type}
-              className={`flex items-start gap-3 border rounded-xl p-3 cursor-pointer transition-colors ${
-                repaymentType === type
-                  ? 'border-green-500 bg-green-50'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <input
-                type="radio"
-                name="repaymentType"
-                value={type}
-                checked={repaymentType === type}
-                onChange={() => handleRepaymentTypeChange(type)}
-                className="mt-0.5 accent-green-600"
-              />
-              <span>
-                <span className="block text-sm font-medium text-gray-900">{repaymentLabels[type].label}</span>
-                <span className="block text-xs text-gray-500">{repaymentLabels[type].hint}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      {repaymentType === 'installment' && (
+    <div className="mx-auto max-w-[860px] px-6 py-8 pb-24">
+      <div className="mb-6 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => router.push('/')}
+          className="grid h-10 w-10 place-items-center rounded-[11px] border-[1.5px] border-border bg-card text-text-2 transition-colors hover:bg-fill"
+        >
+          <ArrowLeft size={18} />
+        </button>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Installment schedule</label>
-          <InstallmentBuilder installments={installments} onChange={setInstallments} />
+          <h1 className="text-2xl font-extrabold tracking-tight">New Collection</h1>
+          <p className="mt-0.5 text-sm text-text-muted">Set up how you&apos;ll collect payments.</p>
+        </div>
+      </div>
+
+      <div className="mb-2 h-1.5 overflow-hidden rounded-pill bg-border">
+        <div className="h-full rounded-pill bg-gradient-to-r from-green-deep to-green transition-all duration-400" style={{ width: `${stepPct}%` }} />
+      </div>
+      <div className="mb-6 flex justify-between text-xs font-semibold text-text-muted">
+        {stepLabels.map((label) => (
+          <span key={label}>{label}</span>
+        ))}
+      </div>
+
+      {step === 1 && (
+        <div className="animate-card-in rounded-card bg-card p-[30px] shadow-card">
+          <h2 className="mb-[22px] text-lg font-extrabold">Collection details</h2>
+          <FloatingInput
+            label="Collection name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            minLength={3}
+            containerClassName="mb-5"
+          />
+          <FloatingTextarea
+            label="Description (optional)"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            containerClassName="mb-5"
+          />
+          <div className="mb-5">
+            <label className="mb-2 block text-[13px] font-semibold text-text-2">Charge amount</label>
+            <div className="relative">
+              <span className="absolute top-1/2 left-[18px] -translate-y-1/2 font-mono text-[22px] font-bold text-navy">
+                ₦
+              </span>
+              <input
+                value={chargeAmount}
+                onChange={(e) => setChargeAmount(e.target.value)}
+                inputMode="numeric"
+                placeholder="0"
+                required
+                className="h-16 w-full rounded-2xl border-[1.5px] border-border pr-[18px] pl-11 font-mono text-2xl font-extrabold outline-none focus:border-green"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3.5">
+            <div>
+              <label className="mb-2 block text-[13px] font-semibold text-text-2">Cycle duration</label>
+              <input
+                value={durationValue}
+                onChange={(e) => setDurationValue(e.target.value)}
+                inputMode="numeric"
+                required
+                className="h-[50px] w-full rounded-control border-[1.5px] border-border px-4 text-[15px] outline-none focus:border-green"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-[13px] font-semibold text-text-2">Unit</label>
+              <select
+                value={durationUnit}
+                onChange={(e) => setDurationUnit(e.target.value as CollectionInput['durationUnit'])}
+                className="h-[50px] w-full rounded-control border-[1.5px] border-border bg-card px-3 text-[15px] outline-none focus:border-green"
+              >
+                {durationUnits.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {unit}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="mt-[26px] flex justify-end">
+            <Button
+              variant="navy"
+              onClick={next}
+              disabled={!name || name.length < 3 || !chargeAmount || Number(chargeAmount) <= 0}
+            >
+              Continue →
+            </Button>
+          </div>
         </div>
       )}
 
-      {error && <p className="text-red-600 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+      {step === 2 && (
+        <div className="animate-card-in rounded-card bg-card p-[30px] shadow-card">
+          <h2 className="mb-1.5 text-lg font-extrabold">Repayment type</h2>
+          <p className="mb-[22px] text-sm text-text-muted">How should payers settle this collection?</p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {repaymentTypes.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => handleRepaymentTypeChange(t.value)}
+                className={`rounded-2xl border-2 p-[18px] text-left transition-all hover:-translate-y-1 ${
+                  repaymentType === t.value ? 'border-green bg-green/5' : 'border-border bg-card'
+                }`}
+              >
+                <div
+                  className={`mb-3.5 grid h-[46px] w-[46px] place-items-center rounded-xl ${
+                    repaymentType === t.value ? 'bg-green text-navy' : 'bg-fill text-text-2'
+                  }`}
+                >
+                  {t.icon}
+                </div>
+                <h3 className="mb-1 text-[15.5px] font-extrabold">{t.label}</h3>
+                <p className="text-[12.5px] leading-snug text-text-muted">{t.hint}</p>
+              </button>
+            ))}
+          </div>
+          <div className="mt-[26px] flex justify-between">
+            <Button variant="outline" onClick={back}>
+              ← Back
+            </Button>
+            <Button variant="navy" onClick={next}>
+              Continue →
+            </Button>
+          </div>
+        </div>
+      )}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="w-full bg-green-600 text-white py-2.5 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
-      >
-        {submitting ? 'Creating collection…' : 'Create collection'}
-      </button>
-    </form>
+      {step === 3 && isInstallment && (
+        <div className="animate-card-in">
+          <div className="mb-5 rounded-card bg-card p-[30px] shadow-card">
+            <h2 className="mb-1.5 text-lg font-extrabold">Installment schedule</h2>
+            <p className="mb-5 text-sm text-text-muted">
+              Drag to set each installment&apos;s share of {formatNGN(Number(chargeAmount) || 0)}.
+            </p>
+            <InstallmentBuilder
+              installments={installments}
+              onChange={setInstallments}
+              chargeAmount={Number(chargeAmount) || 0}
+            />
+          </div>
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={back}>
+              ← Back
+            </Button>
+            <Button variant="navy" onClick={next} disabled={!installmentsBalanced}>
+              Review →
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {step === 4 && (
+        <div className="animate-card-in rounded-card bg-card p-[30px] shadow-card">
+          <h2 className="mb-[22px] text-lg font-extrabold">Review &amp; confirm</h2>
+          <div className="grid grid-cols-1 divide-y divide-border overflow-hidden rounded-2xl border-[1.5px] border-border">
+            {[
+              ['Collection name', name],
+              ['Description', description || '—'],
+              ['Charge amount', formatNGN(Number(chargeAmount) || 0)],
+              ['Repayment type', repaymentTypes.find((t) => t.value === repaymentType)?.label ?? ''],
+              ['Cycle duration', `${durationValue} ${durationUnit}`],
+            ].map(([label, value], i) => (
+              <div key={label} className={`flex justify-between px-[18px] py-4 ${i % 2 === 0 ? 'bg-card-subtle' : ''}`}>
+                <span className="text-[13.5px] text-text-muted">{label}</span>
+                <span className="max-w-[60%] text-right text-sm font-bold">{value}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-[18px] flex items-center gap-2.5 rounded-[10px] border-l-[3px] border-blue bg-blue/[0.07] px-[15px] py-3.5">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="shrink-0">
+              <circle cx="12" cy="12" r="9" stroke="#3B82F6" strokeWidth="1.8" />
+              <path d="M12 8v.3M12 11v5" stroke="#3B82F6" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+            <span className="text-[13px] text-text-2">
+              A permanent virtual account number will be generated. Your payers can save it and use it forever.
+            </span>
+          </div>
+
+          {error && <p className="mt-4 rounded-lg bg-red/10 px-3 py-2 text-sm text-red-text">{error}</p>}
+
+          <div className="mt-[26px] flex justify-between">
+            <Button variant="outline" onClick={back}>
+              ← Back
+            </Button>
+            <Button variant="green" onClick={handleSubmit} disabled={submitting}>
+              {submitting ? 'Creating…' : 'Create Collection'}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

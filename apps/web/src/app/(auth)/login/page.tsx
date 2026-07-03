@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { AuthNavyPanel } from '@/components/auth/auth-navy-panel'
 import { LoginForm } from '@/components/auth/login-form'
 
 export const metadata: Metadata = { title: 'Sign in' }
@@ -7,15 +8,24 @@ export const metadata: Metadata = { title: 'Sign in' }
 export default function LoginPage() {
   return (
     <>
-      <h2 className="text-2xl font-semibold text-gray-900 mb-1">Welcome back</h2>
-      <p className="text-gray-500 text-sm mb-6">Sign in to your Paybook account</p>
-      <LoginForm />
-      <p className="text-center text-sm text-gray-500 mt-6">
-        Don&apos;t have an account?{' '}
-        <Link href="/register" className="text-green-600 font-medium hover:underline">
-          Create one
-        </Link>
-      </p>
+      <AuthNavyPanel
+        heading="Collect smarter."
+        body="Virtual accounts, automatic matching, and clear repayment schedules — for everyone you collect from."
+        showTestimonials
+      />
+      <div className="flex items-center justify-center bg-card px-10 py-12">
+        <div className="w-full max-w-[380px]">
+          <h2 className="mb-1.5 text-[28px] font-extrabold tracking-tight">Welcome back</h2>
+          <p className="mb-8 text-[15px] text-text-muted">Sign in to your Paybook account.</p>
+          <LoginForm />
+          <p className="mt-6 text-center text-sm text-text-muted">
+            Don&apos;t have an account?{' '}
+            <Link href="/register" className="font-bold text-green-text-2 hover:underline">
+              Create one
+            </Link>
+          </p>
+        </div>
+      </div>
     </>
   )
 }

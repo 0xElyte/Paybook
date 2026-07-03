@@ -1,9 +1,13 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { formatNGN, formatDate } from '@/lib/utils'
-import { CopyButton } from '@/components/ui/copy-button'
+import { TopNav } from '@/components/chrome/top-nav'
+import { MonoAccountNumber } from '@/components/ui/mono-account-number'
+import { CopyAccountButton } from '@/components/ui/copy-account-button'
+import { StatusBadge, toneForStatus } from '@/components/ui/status-badge'
 import type { Metadata } from 'next'
 
 interface Props {
@@ -25,170 +29,136 @@ export default async function PayerCollectionDetailPage({ params }: Props) {
   const enrollment = await prisma.enrollment.findUnique({
     where: { collectionId_payerId: { collectionId: id, payerId: userId } },
     include: {
-      collection: {
-        include: { owner: { select: { fullName: true } } },
-      },
+      collection: { include: { owner: { select: { fullName: true } } } },
       bankAccount: true,
-      payerInstallments: {
-        include: { installment: true },
-        orderBy: { dueAt: 'asc' },
-      },
-      transactions: {
-        orderBy: { paidAt: 'desc' },
-        take: 30,
-      },
+      payerInstallments: { include: { installment: true }, orderBy: { dueAt: 'asc' } },
+      transactions: { orderBy: { paidAt: 'desc' }, take: 30 },
     },
   })
 
   if (!enrollment) notFound()
-
   const { collection } = enrollment
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="border-b bg-white">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold text-green-700">
-            Paybook
-          </Link>
-        </div>
-      </header>
+    <div className="relative min-h-screen">
+      <TopNav variant="payer" userName={session.user.name ?? 'there'} />
 
-      <main className="max-w-5xl mx-auto px-4 py-10">
-        <div className="flex items-center gap-2 mb-1">
-          <Link href="/payer/collections" className="text-sm text-gray-500 hover:text-gray-700">
-            My collections
-          </Link>
-          <span className="text-gray-300">/</span>
-          <span className="text-sm text-gray-900 font-medium">{collection.name}</span>
-        </div>
+      <main className="relative z-10 mx-auto max-w-[820px] px-6 py-7 pb-20">
+        <Link
+          href="/payer/collections"
+          className="mb-[18px] flex items-center gap-1.5 text-sm font-bold text-text-2 transition-colors hover:text-text"
+        >
+          <ArrowLeft size={17} />
+          Back to my collections
+        </Link>
+        <h1 className="mb-1 text-2xl font-extrabold tracking-tight">{collection.name}</h1>
+        <p className="mb-6 text-sm text-text-muted">
+          by {collection.owner.fullName} · {collection.repaymentType.replace('_', ' ')}
+        </p>
 
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">{collection.name}</h1>
-          <p className="text-gray-500 text-sm">by {collection.owner.fullName}</p>
-        </div>
-
-        {collection.nombaAccountNo && (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6">
-            <p className="text-xs text-gray-500 mb-1">Transfer your payment to this account</p>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-2xl font-mono font-bold text-green-700">{collection.nombaAccountNo}</p>
-                <p className="text-sm text-gray-600">{collection.nombaBankName}</p>
-              </div>
-              <CopyButton
-                text={collection.nombaAccountNo}
-                className="text-xs text-green-600 border border-green-300 px-3 py-1.5 rounded-lg hover:bg-green-100 transition-colors"
-              />
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <p className="text-xs text-gray-400 mb-1">Total charge</p>
-            <p className="text-lg font-semibold">{formatNGN(Number(collection.chargeAmount))}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <p className="text-xs text-gray-400 mb-1">Total paid</p>
-            <p className="text-lg font-semibold text-green-600">{formatNGN(Number(enrollment.totalPaid))}</p>
-          </div>
-          {Number(enrollment.creditBalance) > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <p className="text-xs text-gray-400 mb-1">Credit balance</p>
-              <p className="text-lg font-semibold text-blue-600">{formatNGN(Number(enrollment.creditBalance))}</p>
-            </div>
-          )}
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-          <p className="text-xs text-gray-400 mb-1">Your registered sending account</p>
-          <p className="text-sm font-medium text-gray-900">
-            {enrollment.bankAccount.bankName} — {enrollment.bankAccount.accountNumber}
-          </p>
-          <p className="text-xs text-gray-500">{enrollment.bankAccount.accountName}</p>
-        </div>
-
-        {enrollment.payerInstallments.length > 0 && (
-          <div className="mb-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-3">Payment schedule</h2>
-            <div className="space-y-2">
-              {enrollment.payerInstallments.map((pi) => (
-                <div
-                  key={pi.id}
-                  className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      Installment {pi.installment.sequenceIndex} — {Number(pi.installment.percentage)}%
-                    </p>
-                    <p className="text-xs text-gray-500 mt-0.5">Due {formatDate(pi.dueAt)}</p>
-                  </div>
-                  <div className="text-right">
-                    <span
-                      className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                        pi.status === 'paid'
-                          ? 'bg-green-100 text-green-700'
-                          : pi.status === 'overdue'
-                            ? 'bg-red-100 text-red-700'
-                            : pi.status === 'partial'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-gray-100 text-gray-600'
-                      }`}
-                    >
-                      {pi.status}
-                    </span>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {formatNGN(Number(pi.amountPaid))} / {formatNGN(Number(pi.amountDue))}
-                    </p>
-                  </div>
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_300px]">
+          <div className="grid gap-5">
+            {enrollment.payerInstallments.length > 0 && (
+              <div className="rounded-card bg-card p-[22px] shadow-card">
+                <h2 className="mb-4 text-base font-extrabold">Installment schedule</h2>
+                <div className="grid">
+                  {enrollment.payerInstallments.map((pi, i) => {
+                    const { tone } = toneForStatus(pi.status)
+                    const dotBg = pi.status === 'paid' ? '#00D97E' : pi.status === 'overdue' ? '#EF4444' : '#B9C4DA'
+                    const isLast = i === enrollment.payerInstallments.length - 1
+                    return (
+                      <div key={pi.id} className="flex items-stretch gap-3.5">
+                        <div className="flex flex-col items-center">
+                          <span
+                            className="z-10 grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full"
+                            style={{ background: dotBg }}
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                              <path d="M5 13l4 4L19 7" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </span>
+                          {!isLast && <span className="w-0.5 flex-1 bg-border" />}
+                        </div>
+                        <div className="flex flex-1 items-center justify-between pb-[22px]">
+                          <div>
+                            <div className="text-[14.5px] font-bold">
+                              Installment {pi.installment.sequenceIndex + 1} — {Number(pi.installment.percentage)}%
+                            </div>
+                            <div className="text-[12.5px] text-text-muted">Due {formatDate(pi.dueAt)}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-mono text-sm font-bold">{formatNGN(Number(pi.amountDue))}</div>
+                            <StatusBadge label={pi.status} tone={tone} pulse={pi.status === 'overdue'} className="mt-0.5" />
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-              ))}
+              </div>
+            )}
+
+            <div className="rounded-card bg-card p-[22px] shadow-card">
+              <h2 className="mb-4 text-base font-extrabold">Payment history</h2>
+              {enrollment.transactions.length === 0 ? (
+                <p className="py-4 text-center text-sm text-text-muted">No transactions yet.</p>
+              ) : (
+                <div className="grid gap-0.5">
+                  <div className="grid grid-cols-[1fr_1fr_90px] border-b border-border px-1 pb-2.5 text-xs font-bold text-text-muted">
+                    <span>Date</span>
+                    <span>Amount</span>
+                    <span className="text-right">Status</span>
+                  </div>
+                  {enrollment.transactions.map((tx) => (
+                    <div key={tx.id} className="grid grid-cols-[1fr_1fr_90px] items-center border-b border-fill py-3 px-1 text-sm">
+                      <span className="text-text-2">{formatDate(tx.paidAt)}</span>
+                      <span className="font-mono font-bold">{formatNGN(Number(tx.amount))}</span>
+                      <span className="text-right">
+                        <StatusBadge label={tx.matchStatus} tone={toneForStatus(tx.matchStatus).tone} />
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
-        )}
 
-        <div>
-          <h2 className="text-base font-semibold text-gray-900 mb-3">Transaction history</h2>
-          {enrollment.transactions.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center text-gray-400 text-sm">
-              No transactions yet.
+          <div className="grid gap-4 lg:sticky lg:top-5">
+            {collection.nombaAccountNo && (
+              <div className="rounded-card bg-gradient-to-br from-navy-tint to-navy p-[22px] text-white shadow-[0_16px_40px_rgba(15,28,63,0.3)]">
+                <div className="mb-3.5 text-[11px] font-bold tracking-[0.08em] text-text-faint uppercase">
+                  Pay into · {collection.nombaBankName}
+                </div>
+                <MonoAccountNumber accountNumber={collection.nombaAccountNo} size="md" showCopy={false} className="mb-3.5 text-white" />
+                <CopyAccountButton accountNumber={collection.nombaAccountNo} />
+              </div>
+            )}
+
+            <div className="rounded-2xl bg-card p-[18px] shadow-card">
+              <div className="mb-1 text-xs text-text-muted">Credit balance</div>
+              <div className="font-mono text-xl font-extrabold text-green-text">
+                {formatNGN(Number(enrollment.creditBalance))}
+              </div>
             </div>
-          ) : (
-            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="border-b border-gray-100 bg-gray-50">
-                  <tr>
-                    {['Amount', 'Narration', 'Date', 'Status'].map((h) => (
-                      <th key={h} className="text-left px-4 py-3 text-xs text-gray-500 font-medium">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {enrollment.transactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-semibold text-gray-900">{formatNGN(Number(tx.amount))}</td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">{tx.narration ?? '—'}</td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">{formatDate(tx.paidAt)}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                            tx.matchStatus === 'matched'
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-amber-100 text-amber-700'
-                          }`}
-                        >
-                          {tx.matchStatus}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+            <div className="rounded-2xl bg-card p-[18px] shadow-card">
+              <div className="mb-1 text-xs text-text-muted">Your registered sending account</div>
+              <p className="text-sm font-bold">
+                {enrollment.bankAccount.bankName} — {enrollment.bankAccount.accountNumber}
+              </p>
+              <p className="text-xs text-text-muted">{enrollment.bankAccount.accountName}</p>
             </div>
-          )}
+
+            <div className="flex gap-2 rounded-[11px] border-l-[3px] border-green bg-green/[0.07] px-3.5 py-3.5">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" className="mt-0.5 shrink-0">
+                <circle cx="12" cy="12" r="9" stroke="#04794a" strokeWidth="1.8" />
+                <path d="M8 12l2.5 2.5L16 9" stroke="#04794a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span className="text-[12.5px] leading-snug text-text-2">
+                Any amount above what&apos;s due automatically rolls over to your next installment.
+              </span>
+            </div>
+          </div>
         </div>
       </main>
     </div>

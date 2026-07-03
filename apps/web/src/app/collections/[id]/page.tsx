@@ -34,6 +34,7 @@ export default async function CollectionDetailPage({ params }: Props) {
           payer: { select: { fullName: true, email: true } },
           bankAccount: { select: { accountNumber: true, bankName: true } },
           payerInstallments: {
+            where: { status: { in: ['pending', 'partial', 'overdue'] } },
             orderBy: { dueAt: 'asc' },
             take: 5,
           },
@@ -56,6 +57,7 @@ export default async function CollectionDetailPage({ params }: Props) {
 
   return (
     <CollectionDetailClient
+      ownerName={session.user.name ?? 'there'}
       collection={{
         id: collection.id,
         name: collection.name,

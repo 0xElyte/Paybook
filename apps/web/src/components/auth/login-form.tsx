@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { signIn } from 'next-auth/react'
+import { FloatingInput } from '@/components/ui/floating-input'
+import { Button } from '@/components/ui/button'
 
 export function LoginForm() {
   const router = useRouter()
@@ -34,46 +36,21 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-          Email
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
-          placeholder="you@example.com"
-        />
-      </div>
+    <form onSubmit={handleSubmit} className="space-y-[18px]">
+      <FloatingInput id="email" name="email" type="email" label="Email address" required autoComplete="email" />
+      <FloatingInput
+        id="password"
+        name="password"
+        type="password"
+        label="Password"
+        required
+        autoComplete="current-password"
+        error={error ?? undefined}
+      />
 
-      <div>
-        <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-          Password
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          required
-          autoComplete="current-password"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
-          placeholder="••••••••"
-        />
-      </div>
-
-      {error && <p className="text-red-600 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full bg-green-600 text-white py-2.5 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
-      >
+      <Button type="submit" variant="navy" disabled={loading} className="w-full">
         {loading ? 'Signing in…' : 'Sign in'}
-      </button>
+      </Button>
     </form>
   )
 }

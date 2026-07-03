@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { AuthNavyPanel } from '@/components/auth/auth-navy-panel'
 import { RegisterForm } from '@/components/auth/register-form'
 
 export const metadata: Metadata = { title: 'Create account' }
@@ -7,15 +8,23 @@ export const metadata: Metadata = { title: 'Create account' }
 export default function RegisterPage() {
   return (
     <>
-      <h2 className="text-2xl font-semibold text-gray-900 mb-1">Create your account</h2>
-      <p className="text-gray-500 text-sm mb-6">Join Paybook to start collecting smarter</p>
-      <RegisterForm />
-      <p className="text-center text-sm text-gray-500 mt-6">
-        Already have an account?{' '}
-        <Link href="/login" className="text-green-600 font-medium hover:underline">
-          Sign in
-        </Link>
-      </p>
+      <AuthNavyPanel
+        heading="Every naira, accounted for."
+        body="Create your account and start collecting in minutes. No spreadsheets, no chasing."
+      />
+      <div className="flex items-center justify-center bg-card px-10 py-12">
+        <div className="w-full max-w-[380px]">
+          <h2 className="mb-1.5 text-[28px] font-extrabold tracking-tight">Create your account</h2>
+          <p className="mb-8 text-[15px] text-text-muted">Start collecting smarter today.</p>
+          <RegisterForm />
+          <p className="mt-6 text-center text-sm text-text-muted">
+            Already have an account?{' '}
+            <Link href="/login" className="font-bold text-green-text-2 hover:underline">
+              Sign in
+            </Link>
+          </p>
+        </div>
+      </div>
     </>
   )
 }

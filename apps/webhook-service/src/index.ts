@@ -17,7 +17,13 @@ app.use('/webhooks', nombaRouter)
 
 app.get('/health', async (_req, res) => {
   try {
-    await prisma.$queryRaw`SELECT 1`
+    // Bound the DB check so a hung connection (e.g. a slow/unreachable pool)
+    // can never hold this request open indefinitely — fail fast and visibly
+    // instead of leaving the platform's health probe waiting forever.
+    await Promise.race([
+      prisma.$queryRaw`SELECT 1`,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('DB health check timed out after 5s')), 5000)),
+    ])
     res.json({
       status: 'ok',
       db: 'connected',

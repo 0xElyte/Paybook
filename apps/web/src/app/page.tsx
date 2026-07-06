@@ -6,6 +6,7 @@ import { prisma } from '@/lib/db'
 import { formatNGN } from '@/lib/utils'
 import { TopNav } from '@/components/chrome/top-nav'
 import { EmailVerificationBanner } from '@/components/chrome/email-verification-banner'
+import { AutoRefresh } from '@/components/chrome/auto-refresh'
 import { AnimatedCounter } from '@/components/ui/animated-counter'
 import { MonoAccountNumber } from '@/components/ui/mono-account-number'
 import { StatusBadge } from '@/components/ui/status-badge'
@@ -78,6 +79,7 @@ export default async function HomePage() {
   return (
     <div className="relative min-h-screen">
       <TopNav variant="owner" userName={session?.user?.name ?? 'there'} activeHref="/" />
+      <AutoRefresh />
 
       <Image
         src="/paybook-logo-full.png"

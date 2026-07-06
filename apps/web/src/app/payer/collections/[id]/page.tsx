@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { formatNGN, formatDate } from '@/lib/utils'
 import { TopNav } from '@/components/chrome/top-nav'
+import { AutoRefresh } from '@/components/chrome/auto-refresh'
 import { MonoAccountNumber } from '@/components/ui/mono-account-number'
 import { CopyAccountButton } from '@/components/ui/copy-account-button'
 import { StatusBadge, toneForStatus } from '@/components/ui/status-badge'
@@ -42,6 +43,7 @@ export default async function PayerCollectionDetailPage({ params }: Props) {
   return (
     <div className="relative min-h-screen">
       <TopNav variant="payer" userName={session.user.name ?? 'there'} />
+      <AutoRefresh />
 
       <main className="relative z-10 mx-auto max-w-[820px] px-6 py-7 pb-20">
         <Link

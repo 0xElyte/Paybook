@@ -128,7 +128,7 @@ export function InstallmentBuilder({
                 </div>
               </div>
 
-              <div className="flex items-center gap-3.5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-3.5">
                 <div
                   ref={(el) => {
                     trackRefs.current[index] = el
@@ -150,6 +150,7 @@ export function InstallmentBuilder({
                     style={{ left: `${inst.percentage}%`, borderColor: color }}
                   />
                 </div>
+                <div className="flex items-center gap-3.5">
                 <div className="flex items-center gap-1">
                   <input
                     value={inst.percentage}
@@ -178,6 +179,7 @@ export function InstallmentBuilder({
                       </option>
                     ))}
                   </select>
+                </div>
                 </div>
               </div>
             </div>

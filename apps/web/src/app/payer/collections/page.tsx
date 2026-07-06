@@ -6,6 +6,7 @@ import { prisma } from '@/lib/db'
 import { formatNGN, formatDate } from '@/lib/utils'
 import { TopNav } from '@/components/chrome/top-nav'
 import { EmailVerificationBanner } from '@/components/chrome/email-verification-banner'
+import { AutoRefresh } from '@/components/chrome/auto-refresh'
 import { AnimatedCounter } from '@/components/ui/animated-counter'
 import { StatusBadge, toneForStatus } from '@/components/ui/status-badge'
 import type { Metadata } from 'next'
@@ -63,6 +64,7 @@ export default async function PayerCollectionsPage() {
   return (
     <div className="relative min-h-screen">
       <TopNav variant="payer" userName={session.user.name ?? 'there'} />
+      <AutoRefresh />
 
       <Image
         src="/paybook-logo-full.png"

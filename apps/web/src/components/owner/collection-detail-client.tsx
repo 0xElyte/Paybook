@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { UserPlus2 } from 'lucide-react'
 import { formatNGN, formatDate } from '@/lib/utils'
 import { TopNav } from '@/components/chrome/top-nav'
+import { AutoRefresh } from '@/components/chrome/auto-refresh'
 import { MonoAccountNumber } from '@/components/ui/mono-account-number'
 import { StatusBadge, toneForStatus } from '@/components/ui/status-badge'
 import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/ui/toast'
 
 interface InviteLink {
   id: string
@@ -71,16 +73,60 @@ interface Props {
 
 type Tab = 'payers' | 'transactions' | 'invite'
 
-export function CollectionDetailClient({ collection, inviteLinks, enrollments, transactions, ownerName }: Props) {
+export function CollectionDetailClient({ collection, inviteLinks, enrollments, transactions: initialTransactions, ownerName }: Props) {
+  const { addToast } = useToast()
   const [tab, setTab] = useState<Tab>('invite')
   const [generatingLink, setGeneratingLink] = useState(false)
   const [linkError, setLinkError] = useState<string | null>(null)
   const [localLinks, setLocalLinks] = useState<InviteLink[]>(inviteLinks)
+  useEffect(() => setLocalLinks(inviteLinks), [inviteLinks])
   const [maxUsesInput, setMaxUsesInput] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions)
+  // Keep in sync with fresh server data from AutoRefresh's polling — otherwise
+  // the optimistic update in submitAssign would permanently shadow later polls.
+  useEffect(() => setTransactions(initialTransactions), [initialTransactions])
+  const [assigningTxId, setAssigningTxId] = useState<string | null>(null)
+  const [selectedEnrollmentId, setSelectedEnrollmentId] = useState<string>('')
+  const [assignSubmitting, setAssignSubmitting] = useState(false)
+  const [assignError, setAssignError] = useState<string | null>(null)
 
   const totalCollected = transactions.filter((tx) => tx.matchStatus === 'matched').reduce((sum, tx) => sum + tx.amount, 0)
   const unmatchedCount = transactions.filter((tx) => tx.matchStatus === 'unmatched').length
+
+  function startAssign(txId: string) {
+    setAssigningTxId(txId)
+    setSelectedEnrollmentId('')
+    setAssignError(null)
+  }
+
+  async function submitAssign(txId: string) {
+    if (!selectedEnrollmentId) return
+    setAssignSubmitting(true)
+    setAssignError(null)
+
+    const res = await fetch(`/api/transactions/${txId}/assign`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enrollmentId: selectedEnrollmentId }),
+    })
+
+    setAssignSubmitting(false)
+
+    if (!res.ok) {
+      const data = (await res.json()) as { error: string }
+      setAssignError(data.error ?? 'Failed to assign')
+      return
+    }
+
+    const payer = enrollments.find((e) => e.id === selectedEnrollmentId)
+    setTransactions((prev) =>
+      prev.map((tx) =>
+        tx.id === txId ? { ...tx, matchStatus: 'matched', payerName: payer?.payerName ?? tx.payerName } : tx
+      )
+    )
+    setAssigningTxId(null)
+  }
 
   async function generateInviteLink() {
     setGeneratingLink(true)
@@ -107,6 +153,7 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
   async function copyLink(token: string, id: string) {
     await navigator.clipboard.writeText(`${window.location.origin}/invite/${token}`)
     setCopiedId(id)
+    addToast('Link copied', 'Share it with your payer to get them onboarded.')
     setTimeout(() => setCopiedId(null), 2000)
   }
 
@@ -124,6 +171,7 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
   return (
     <div className="relative min-h-screen">
       <TopNav variant="owner" userName={ownerName} />
+      <AutoRefresh />
 
       <main className="relative z-10 mx-auto max-w-[1040px] px-6 py-7 pb-20">
         <Link href="/" className="mb-[18px] flex w-fit items-center gap-1.5 text-sm font-bold text-text-2 hover:text-text">
@@ -221,14 +269,58 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
                           <span className="text-right">Match</span>
                         </div>
                         {transactions.map((tx) => (
-                          <div key={tx.id} className="grid grid-cols-[0.7fr_0.9fr_1fr_1fr_1fr] items-center border-b border-fill px-2 py-3.5 text-[13px]">
-                            <span className="text-text-2">{formatDate(tx.paidAt)}</span>
-                            <span className="text-right font-mono font-bold text-green-text">{formatNGN(tx.amount)}</span>
-                            <span className="truncate text-text-muted">{tx.senderName}</span>
-                            <span className="truncate font-semibold">{tx.payerName ?? '—'}</span>
-                            <span className="text-right">
-                              <StatusBadge label={tx.matchStatus} tone={toneForStatus(tx.matchStatus).tone} />
-                            </span>
+                          <div key={tx.id} className="border-b border-fill px-2 py-3.5 text-[13px]">
+                            <div className="grid grid-cols-[0.7fr_0.9fr_1fr_1fr_1fr] items-center">
+                              <span className="text-text-2">{formatDate(tx.paidAt)}</span>
+                              <span className="text-right font-mono font-bold text-green-text">{formatNGN(tx.amount)}</span>
+                              <span className="truncate text-text-muted">{tx.senderName}</span>
+                              <span className="truncate font-semibold">{tx.payerName ?? '—'}</span>
+                              <span className="flex items-center justify-end gap-2 text-right">
+                                <StatusBadge label={tx.matchStatus} tone={toneForStatus(tx.matchStatus).tone} />
+                                {tx.matchStatus === 'unmatched' && assigningTxId !== tx.id && (
+                                  <button
+                                    type="button"
+                                    onClick={() => startAssign(tx.id)}
+                                    className="text-xs font-bold text-green-text-2 hover:underline"
+                                  >
+                                    Assign
+                                  </button>
+                                )}
+                              </span>
+                            </div>
+
+                            {assigningTxId === tx.id && (
+                              <div className="animate-float-up mt-3 flex flex-wrap items-center gap-2 rounded-[10px] bg-surface p-3">
+                                <select
+                                  value={selectedEnrollmentId}
+                                  onChange={(e) => setSelectedEnrollmentId(e.target.value)}
+                                  className="h-9 flex-1 rounded-lg border-[1.5px] border-border bg-card px-2.5 text-[13px] outline-none focus:border-green"
+                                >
+                                  <option value="">Select payer…</option>
+                                  {enrollments.map((e) => (
+                                    <option key={e.id} value={e.id}>
+                                      {e.payerName}
+                                    </option>
+                                  ))}
+                                </select>
+                                <Button
+                                  variant="navy"
+                                  onClick={() => submitAssign(tx.id)}
+                                  disabled={!selectedEnrollmentId || assignSubmitting}
+                                  className="h-9 px-3 text-xs"
+                                >
+                                  {assignSubmitting ? 'Assigning…' : 'Confirm'}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  onClick={() => setAssigningTxId(null)}
+                                  className="h-9 px-2.5 text-xs"
+                                >
+                                  Cancel
+                                </Button>
+                                {assignError && <p className="w-full text-xs text-red-text">{assignError}</p>}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

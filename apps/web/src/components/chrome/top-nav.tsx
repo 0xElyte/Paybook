@@ -38,14 +38,14 @@ export function TopNav({
 
   return (
     <>
-      <div className="sticky top-0 z-40 flex h-[66px] items-center gap-7 border-b border-border bg-card/90 px-8 backdrop-blur-[10px]">
+      <div className="sticky top-0 z-40 flex h-[66px] items-center gap-4 border-b border-border bg-card/90 px-4 backdrop-blur-[10px] sm:gap-7 sm:px-8">
         <Link href="/" className="flex items-center gap-2.5">
           <Image src="/paybook-mark.png" alt="Paybook" width={32} height={32} />
           <span className="text-lg font-extrabold tracking-tight text-text">Paybook</span>
         </Link>
 
         {variant === 'owner' && (
-          <nav className="ml-2 flex items-center gap-1">
+          <nav className="ml-2 hidden items-center gap-1 md:flex">
             {ownerLinks.map((link) => (
               <Link
                 key={link.label}

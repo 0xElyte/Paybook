@@ -6,6 +6,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./payment-application": {
+      "types": "./src/payment-application.ts",
+      "default": "./src/payment-application.ts"
     }
   },
   "scripts": {

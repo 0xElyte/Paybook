@@ -2,10 +2,11 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Wallet, Layers, ListChecks } from 'lucide-react'
+import { ArrowLeft, Wallet, Layers, ListChecks, Loader2 } from 'lucide-react'
 import { durationUnits, type CollectionInput, type InstallmentInput } from '@/lib/validations/collection'
 import { FloatingInput, FloatingTextarea } from '@/components/ui/floating-input'
 import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/ui/toast'
 import { formatNGN } from '@/lib/utils'
 import { InstallmentBuilder } from './installment-builder'
 import { SuccessScreen } from './success-screen'
@@ -25,6 +26,7 @@ const stepLabels = ['Details', 'Repayment', 'Schedule', 'Review']
 
 export function CollectionForm() {
   const router = useRouter()
+  const { addToast } = useToast()
   const [step, setStep] = useState(1)
 
   const [name, setName] = useState('')
@@ -112,6 +114,7 @@ export function CollectionForm() {
       accountNumber: collection.nombaAccountNo,
       bankName: collection.nombaBankName,
     })
+    addToast('Collection created', `"${collection.name}" is live with its own virtual account.`)
   }
 
   if (result) {
@@ -312,14 +315,25 @@ export function CollectionForm() {
             </span>
           </div>
 
+          <div className="mt-2.5 flex items-center gap-2.5 rounded-[10px] border-l-[3px] border-green bg-green/[0.07] px-[15px] py-3.5">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="shrink-0">
+              <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" stroke="#04794a" strokeWidth="1.7" strokeLinejoin="round" />
+              <path d="M9 12l2 2 4-4" stroke="#04794a" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span className="text-[13px] text-text-2">
+              Funds go directly to this Collection&apos;s dedicated account — never through a personal account.
+            </span>
+          </div>
+
           {error && <p className="mt-4 rounded-lg bg-red/10 px-3 py-2 text-sm text-red-text">{error}</p>}
 
           <div className="mt-[26px] flex justify-between">
-            <Button variant="outline" onClick={back}>
+            <Button variant="outline" onClick={back} disabled={submitting}>
               ← Back
             </Button>
-            <Button variant="green" onClick={handleSubmit} disabled={submitting}>
-              {submitting ? 'Creating…' : 'Create Collection'}
+            <Button variant="green" onClick={handleSubmit} disabled={submitting} className="gap-2">
+              {submitting && <Loader2 size={16} className="animate-spin" />}
+              {submitting ? 'Creating collection…' : 'Create Collection'}
             </Button>
           </div>
         </div>

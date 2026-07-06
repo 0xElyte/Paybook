@@ -8,6 +8,7 @@ import { nigerianBanks } from '@/lib/nigerian-banks'
 import { FloatingInput } from '@/components/ui/floating-input'
 import { Button } from '@/components/ui/button'
 import { MonoAccountNumber } from '@/components/ui/mono-account-number'
+import { useToast } from '@/components/ui/toast'
 
 interface InstallmentInfo {
   sequenceIndex: number
@@ -42,6 +43,7 @@ type Step = 'overview' | 'login_or_register' | 'bank_account' | 'done'
 export function InviteLandingClient({ link, collection }: Props) {
   const { status } = useSession()
   const router = useRouter()
+  const { addToast } = useToast()
   const [step, setStep] = useState<Step>('overview')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -104,6 +106,7 @@ export function InviteLandingClient({ link, collection }: Props) {
     }
 
     setStep('done')
+    addToast('You\'re in!', `You've joined ${collection.name}.`)
     setTimeout(() => router.push('/payer/collections'), 3000)
   }
 

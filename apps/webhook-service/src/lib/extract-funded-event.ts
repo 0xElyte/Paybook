@@ -1,9 +1,12 @@
 /**
- * Field paths for `virtual_account.funded` are NOT yet confirmed against a live
- * delivery (see docs/NOMBA_INTEGRATION.md, Section 5). Each field below tries a
- * few candidate paths inferred from the `payment_success` payload shape, since
- * that's the closest confirmed reference. Once a real payload has been captured,
- * collapse this back down to the single confirmed path per field and update the doc.
+ * CONFIRMED by Nomba support (2026-07-06): virtual account funding via transfer
+ * delivers as a `payment_success` event, not `virtual_account.funded`. Support also
+ * noted the payload carries a "TRF or VA reference" and the NUBAN the funds landed
+ * in — but exact field paths still aren't confirmed against a real captured payload
+ * (see docs/NOMBA_INTEGRATION.md, Section 5). Each field below tries a few candidate
+ * paths inferred from general `payment_success` shape. Once a real payload is
+ * captured, collapse this down to the single confirmed path per field and update
+ * the doc.
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

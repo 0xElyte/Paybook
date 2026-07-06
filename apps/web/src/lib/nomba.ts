@@ -8,7 +8,12 @@ import { Redis } from '@upstash/redis'
 // credentials before both services rely on nombaFetch concurrently in production.
 
 const TOKEN_KEY = 'nomba:access_token'
-const TOKEN_TTL_SECONDS = 55 * 60 // proactive refresh 5 min before the real 60-min expiry
+// Nomba's own docs disagree on token lifetime: NOMBA_INTEGRATION.md's live-confirmed
+// note says 60 min, but the bundled Nomba integration skill (sourced from
+// developer.nomba.com) says 30 min. Cache conservatively under the shorter claim —
+// the 401-retry fallback in nombaFetch() means this was never silently broken even
+// under the old 55-min TTL, just riskier (up to 25 stale minutes) than necessary.
+const TOKEN_TTL_SECONDS = 25 * 60
 
 let _redis: Redis | null | undefined
 let memToken: { value: string; expiresAt: number } | null = null
@@ -77,7 +82,13 @@ async function issueToken(): Promise<string> {
     throw new Error(`Nomba token issuance failed: ${res.status} — ${body}`)
   }
 
-  const json = (await res.json()) as { data: { access_token: string } }
+  // Nomba can return HTTP 200 with an error `code` in the body (per the bundled
+  // integration skill: "a 200 response with code: '02' is an error") — HTTP status
+  // alone is not sufficient.
+  const json = (await res.json()) as { code?: string; description?: string; data: { access_token: string } }
+  if (json.code && json.code !== '00') {
+    throw new Error(`Nomba token issuance failed: code ${json.code} — ${json.description ?? 'no description'}`)
+  }
   const token = json.data.access_token
 
   await cacheToken(token)
@@ -169,6 +180,10 @@ export async function createVirtualAccount(params: {
     throw new Error(`createVirtualAccount failed: ${res.status} — ${body}`)
   }
 
-  const json = (await res.json()) as { data: NombaVirtualAccount }
+  // See issueToken() above — HTTP 200 with an error `code` in the body is possible.
+  const json = (await res.json()) as { code?: string; description?: string; data: NombaVirtualAccount }
+  if (json.code && json.code !== '00') {
+    throw new Error(`createVirtualAccount failed: code ${json.code} — ${json.description ?? 'no description'}`)
+  }
   return json.data
 }

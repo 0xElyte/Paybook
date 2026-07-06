@@ -51,6 +51,11 @@
       "sourceType": "autoskills-registry",
       "computedHash": "b15b3e6dda23d3f3c230285a122de9df3aabae6408dc2bd52038445e60ba745e"
     },
+    "nombainc": {
+      "source": "developer.nomba.com",
+      "sourceType": "well-known",
+      "computedHash": "68438212b72930cf129fbfb5a02f88650da5c3e68748ab70133c678a85f81722"
+    },
     "prisma-cli": {
       "source": "prisma/skills",
       "sourceType": "autoskills-registry",

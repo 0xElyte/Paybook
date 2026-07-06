@@ -39,9 +39,18 @@ export async function handleVirtualAccountFunded(req: Request, res: Response) {
   // (see refs/docs/NOMBA_INTEGRATION.md, Section 5, outstanding checkpoint).
   logger.info('webhook.received', { eventType: event.eventType, raw })
 
-  // Only process virtual_account.funded — payment_success is checkout/card-only,
-  // out of scope for Paybook (bank-transfer-only product).
-  if (event.eventType !== 'virtual_account.funded') {
+  // Accept both event names defensively. `virtual_account.funded` was the original
+  // assumption, but Nomba's public docs (developer.nomba.com) and the bundled
+  // integration skill only document `payment_success` as the "payment received"
+  // event — there is no `virtual_account.funded` in their canonical event list.
+  // Paybook never uses Checkout, so any `payment_success` this account receives can
+  // only be a virtual account funding — accepting it carries no ambiguity risk here,
+  // and silently dropping a real payment would be the exact failure mode this
+  // product exists to prevent. Once a real delivery is captured, narrow this back
+  // down to whichever single name is actually confirmed — see NOMBA_INTEGRATION.md
+  // Section 5.
+  const ACCEPTED_EVENT_TYPES = new Set(['virtual_account.funded', 'payment_success'])
+  if (!event.eventType || !ACCEPTED_EVENT_TYPES.has(event.eventType)) {
     logger.info('webhook.ignored', { eventType: event.eventType })
     res.sendStatus(200)
     return

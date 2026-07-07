@@ -465,7 +465,10 @@ function CtaBand({ authenticated }: { authenticated: boolean }) {
   return (
     <section className="relative px-6 py-24">
       <Reveal direction="scale">
-        <div className="landing-grid-bg-dark relative mx-auto max-w-[1080px] overflow-hidden rounded-[28px] bg-gradient-to-br from-navy-tint to-navy px-8 py-16 text-center text-white shadow-[0_36px_90px_rgba(15,28,63,0.45)]">
+        {/* bg-navy is load-bearing: landing-grid-bg-dark and bg-gradient-to-br both
+            set background-image and the grid wins, so without a solid background-color
+            the card renders white behind its white text. */}
+        <div className="landing-grid-bg-dark relative mx-auto max-w-[1080px] overflow-hidden rounded-[28px] bg-navy bg-gradient-to-br from-navy-tint to-navy px-8 py-16 text-center text-white shadow-[0_36px_90px_rgba(15,28,63,0.45)]">
           <div
             aria-hidden
             className="pointer-events-none absolute -top-32 left-1/2 h-[340px] w-[620px] -translate-x-1/2 rounded-full blur-[100px]"

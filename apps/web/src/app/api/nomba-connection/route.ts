@@ -39,24 +39,34 @@ export async function POST(req: Request) {
     )
   }
 
-  const connection = await prisma.nombaConnection.upsert({
-    where: { ownerId: session.user.id },
-    update: {
-      accountId,
-      clientId,
-      clientSecretEnc: encryptSecret(clientSecret),
-      subAccountId,
-    },
-    create: {
-      ownerId: session.user.id,
-      accountId,
-      clientId,
-      clientSecretEnc: encryptSecret(clientSecret),
-      subAccountId,
-    },
-  })
+  // Credentials are valid at this point — anything that fails below is OUR
+  // configuration/storage problem, not the owner's. Never let it surface as a
+  // bare 500: say so, and log the real cause for the server operator.
+  let secretEnc: string
+  try {
+    secretEnc = encryptSecret(clientSecret)
+  } catch (err) {
+    console.error('nomba-connection: encryption failed (check PAYBOOK_ENCRYPTION_KEY):', err)
+    return NextResponse.json(
+      { error: 'Your credentials are valid, but the server could not store them securely. This is a Paybook configuration issue — contact support.' },
+      { status: 500 }
+    )
+  }
 
-  return NextResponse.json({ linked: true, accountId: mask(connection.accountId) }, { status: 201 })
+  try {
+    const connection = await prisma.nombaConnection.upsert({
+      where: { ownerId: session.user.id },
+      update: { accountId, clientId, clientSecretEnc: secretEnc, subAccountId },
+      create: { ownerId: session.user.id, accountId, clientId, clientSecretEnc: secretEnc, subAccountId },
+    })
+    return NextResponse.json({ linked: true, accountId: mask(connection.accountId) }, { status: 201 })
+  } catch (err) {
+    console.error('nomba-connection: failed to persist connection:', err)
+    return NextResponse.json(
+      { error: 'Your credentials are valid, but saving the connection failed. Please try again.' },
+      { status: 500 }
+    )
+  }
 }
 
 export async function GET() {

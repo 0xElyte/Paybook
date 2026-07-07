@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Loader2, Megaphone, UserPlus2, UserRoundX } from 'lucide-react'
+import { Loader2, Megaphone, Phone, UserPlus2, UserRoundX } from 'lucide-react'
 import { formatNGN, formatDate } from '@/lib/utils'
 import { TopNav } from '@/components/chrome/top-nav'
 import { AutoRefresh } from '@/components/chrome/auto-refresh'
@@ -12,6 +12,7 @@ import { StatusBadge, toneForStatus } from '@/components/ui/status-badge'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
 import { BroadcastModal } from './broadcast-modal'
+import { ContactModal } from '@/components/ui/contact-modal'
 
 interface InviteLink {
   id: string
@@ -38,6 +39,7 @@ interface Enrollment {
   exitRequestedBy: string | null
   payerName: string
   payerEmail: string
+  payerPhone: string
   bankAccount: string
   joinedAt: string
   totalPaid: number
@@ -88,6 +90,7 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
   const [tab, setTab] = useState<Tab>('payers')
   const [broadcastOpen, setBroadcastOpen] = useState(false)
   const [removingId, setRemovingId] = useState<string | null>(null)
+  const [contactEnrollment, setContactEnrollment] = useState<Enrollment | null>(null)
   const [exitBusyId, setExitBusyId] = useState<string | null>(null)
   const [exitError, setExitError] = useState<string | null>(null)
   const [generatingLink, setGeneratingLink] = useState(false)
@@ -202,6 +205,17 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
       <TopNav variant="owner" userName={ownerName} />
       <AutoRefresh />
 
+      {contactEnrollment && (
+        <ContactModal
+          open
+          onClose={() => setContactEnrollment(null)}
+          name={contactEnrollment.payerName}
+          subtitle={`Payer in ${collection.name}`}
+          email={contactEnrollment.payerEmail}
+          phone={contactEnrollment.payerPhone}
+        />
+      )}
+
       <BroadcastModal
         collectionId={collection.id}
         payers={enrollments.map((e) => ({ payerId: e.payerId, payerName: e.payerName }))}
@@ -305,7 +319,15 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
                                 <span className="text-right font-mono text-[13px] font-bold text-text-muted">
                                   {formatNGN(Math.max(0, outstanding))}
                                 </span>
-                                <span className="text-right">
+                                <span className="flex items-center justify-end gap-0.5 text-right">
+                                  <button
+                                    type="button"
+                                    title="Contact payer"
+                                    onClick={() => setContactEnrollment(e)}
+                                    className="rounded-[8px] p-1.5 text-text-faint transition-colors hover:bg-fill hover:text-navy"
+                                  >
+                                    <Phone size={15} />
+                                  </button>
                                   {e.status === 'active' ? (
                                     <button
                                       type="button"

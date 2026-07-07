@@ -35,7 +35,7 @@ export default async function CollectionDetailPage({ params }: Props) {
       enrollments: {
         where: { status: { in: ['active', 'exit_pending'] } },
         include: {
-          payer: { select: { fullName: true, email: true } },
+          payer: { select: { fullName: true, email: true, phone: true } },
           bankAccount: { select: { accountNumber: true, bankName: true } },
           payerInstallments: {
             where: { status: { in: ['pending', 'partial', 'overdue'] } },
@@ -91,6 +91,7 @@ export default async function CollectionDetailPage({ params }: Props) {
         exitRequestedBy: e.exitRequestedBy,
         payerName: e.payer.fullName,
         payerEmail: e.payer.email,
+        payerPhone: e.payer.phone,
         bankAccount: e.bankAccount
           ? `${e.bankAccount.bankName} — ${e.bankAccount.accountNumber}`
           : 'Links on first payment',

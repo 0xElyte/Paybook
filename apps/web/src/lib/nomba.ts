@@ -192,14 +192,14 @@ export interface NombaVirtualAccount {
   createdAt: string
 }
 
-// The LIVE API rejects account names containing anything beyond letters,
-// digits and spaces ("Account name must not contain special characters" —
-// confirmed 2026-07-07; the sandbox accepted hyphens). Sanitize at this
-// boundary so no caller can trip it, and re-pad to the 8-char minimum in case
-// stripping shortened the name.
+// The LIVE API rejects account names containing anything beyond letters and
+// digits — even spaces trip "Account name must not contain special characters"
+// (confirmed 2026-07-07; the sandbox accepted hyphens and spaces). Sanitize at
+// this boundary so no caller can trip it, padding back to the 8-char minimum
+// in case stripping shortened the name.
 function sanitizeAccountName(name: string): string {
-  const cleaned = name.replace(/[^a-zA-Z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
-  return (cleaned.length < 8 ? `Paybook ${cleaned}` : cleaned).slice(0, 64).trim()
+  const cleaned = name.replace(/[^a-zA-Z0-9]+/g, '')
+  return (cleaned.length < 8 ? `Paybook${cleaned}` : cleaned).slice(0, 64)
 }
 
 export async function createVirtualAccount(
@@ -211,31 +211,40 @@ export async function createVirtualAccount(
   creds: NombaCredentials = envNombaCredentials()
 ): Promise<NombaVirtualAccount> {
   const subAccountId = params.subAccountId ?? creds.subAccountId
-  if (!subAccountId) {
-    throw new Error('No sub-account ID available for virtual account creation')
-  }
-
-  const res = await nombaFetch(`/accounts/virtual/${subAccountId}`, {
-    method: 'POST',
-    body: JSON.stringify({
-      accountRef: params.accountRef,
-      accountName: sanitizeAccountName(params.accountName),
-      // expiryDate omitted -> permanent static virtual account
-      // expectedAmount omitted -> part_payment/installment Collections accept any amount
-    }),
-    _ref: params.accountRef,
-    _creds: creds,
+  const body = JSON.stringify({
+    accountRef: params.accountRef,
+    accountName: sanitizeAccountName(params.accountName),
+    // expiryDate omitted -> permanent static virtual account
+    // expectedAmount omitted -> part_payment/installment Collections accept any amount
   })
 
-  if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`createVirtualAccount failed: ${res.status} — ${body}`)
+  // Two live-verified attachment points (2026-07-07): under a sub-account
+  // (`/accounts/virtual/{subAccountId}`), or directly under the parent account
+  // (`/accounts/virtual`). The hackathon live credentials are DENIED on the
+  // sub-account path ("not authorized to perform actions on this sub-account")
+  // but succeed on the root path — so on an authorization denial, fall back to
+  // the root endpoint rather than failing the collection.
+  const paths = subAccountId ? [`/accounts/virtual/${subAccountId}`, '/accounts/virtual'] : ['/accounts/virtual']
+
+  let lastError = 'no attempt made'
+  for (const path of paths) {
+    const res = await nombaFetch(path, { method: 'POST', body, _ref: params.accountRef, _creds: creds })
+    const text = await res.text()
+    let json: { code?: string; description?: string; message?: string; data?: NombaVirtualAccount } | null = null
+    try {
+      json = JSON.parse(text) as typeof json
+    } catch {
+      /* non-JSON error body — handled below */
+    }
+
+    // See issueToken() — HTTP 200 with an error `code` in the body is possible.
+    if (res.ok && json?.code === '00' && json.data) return json.data
+
+    lastError = `createVirtualAccount failed at ${path}: HTTP ${res.status} — ${json ? `code ${json.code}: ${json.message ?? json.description}` : text.slice(0, 200)}`
+
+    const authDenied = res.status === 403 || json?.code === '401' || json?.code === '403'
+    if (!authDenied) break // a validation error will fail everywhere — don't retry
   }
 
-  // See issueToken() above — HTTP 200 with an error `code` in the body is possible.
-  const json = (await res.json()) as { code?: string; description?: string; data: NombaVirtualAccount }
-  if (json.code && json.code !== '00') {
-    throw new Error(`createVirtualAccount failed: code ${json.code} — ${json.description ?? 'no description'}`)
-  }
-  return json.data
+  throw new Error(lastError)
 }

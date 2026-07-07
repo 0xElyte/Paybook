@@ -42,6 +42,7 @@ export function toneForStatus(status: string): { tone: StatusTone; pulse: boolea
     case 'paid':
     case 'active':
     case 'matched':
+    case 'accepted':
       return { tone: 'green', pulse: false }
     case 'partial':
       return { tone: 'blue', pulse: false }

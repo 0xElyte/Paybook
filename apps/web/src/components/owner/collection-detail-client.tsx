@@ -106,7 +106,11 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
   useEffect(() => setTransactions(initialTransactions), [initialTransactions])
   const [unmatchedOpen, setUnmatchedOpen] = useState(false)
 
-  const totalCollected = transactions.filter((tx) => tx.matchStatus === 'matched').reduce((sum, tx) => sum + tx.amount, 0)
+  // Accepted transfers count as collected — the money is in the collection's
+  // account, it just isn't attributed to a payer. Refunded ones don't.
+  const totalCollected = transactions
+    .filter((tx) => tx.matchStatus === 'matched' || tx.matchStatus === 'accepted')
+    .reduce((sum, tx) => sum + tx.amount, 0)
   const unmatchedTransfers = transactions.filter((tx) => tx.matchStatus === 'unmatched')
   const unmatchedCount = unmatchedTransfers.length
 
@@ -122,6 +126,11 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
         tx.id === txId ? { ...tx, matchStatus: 'matched', payerName: payer?.payerName ?? tx.payerName } : tx
       )
     )
+    router.refresh()
+  }
+
+  function handleResolved(txId: string, status: 'accepted' | 'refunded') {
+    setTransactions((prev) => prev.map((tx) => (tx.id === txId ? { ...tx, matchStatus: status } : tx)))
     router.refresh()
   }
 
@@ -222,6 +231,7 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
         open={unmatchedOpen}
         onClose={() => setUnmatchedOpen(false)}
         onMatched={handleMatched}
+        onResolved={handleResolved}
       />
 
       <main className="relative z-10 mx-auto max-w-[1040px] px-6 py-7 pb-20">

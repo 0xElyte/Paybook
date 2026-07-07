@@ -57,6 +57,8 @@ enum InstallmentStatus {
 enum MatchStatus {
   matched
   unmatched
+  accepted // owner kept an unmatched transfer without attributing it to a payer (one-time/anonymous sender)
+  refunded // owner marked an unmatched transfer as returned to the sender (the transfer itself happens outside Paybook)
   disputed
 }
 

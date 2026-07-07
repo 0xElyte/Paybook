@@ -55,6 +55,10 @@ export default async function CollectionDetailPage({ params }: Props) {
           },
         },
       },
+      activities: {
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      },
     },
   })
 
@@ -119,6 +123,12 @@ export default async function CollectionDetailPage({ params }: Props) {
         paidAt: tx.paidAt.toISOString(),
         matchStatus: tx.matchStatus,
         payerName: tx.enrollment?.payer?.fullName ?? null,
+      }))}
+      activities={collection.activities.map((a) => ({
+        id: a.id,
+        type: a.type,
+        message: a.message,
+        createdAt: a.createdAt.toISOString(),
       }))}
     />
   )

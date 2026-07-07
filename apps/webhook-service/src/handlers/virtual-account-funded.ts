@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import { Prisma, prisma } from '@paybook/db'
 import { applyPayment } from '@paybook/db/payment-application'
+import { logActivity } from '@paybook/db/activity'
 import { verifyNombaSignature } from '../lib/verify-signature'
 import { parseFundedEvent } from '../lib/extract-funded-event'
 import { logger } from '../lib/logger'
@@ -141,6 +142,7 @@ async function processWebhook(req: Request, res: Response) {
           where: { nombaAccountRef: event.accountRef },
           include: {
             collection: true,
+            payer: { select: { fullName: true } },
             payerInstallments: {
               where: { status: { in: ['pending', 'partial', 'overdue'] } },
               orderBy: { dueAt: 'asc' },
@@ -153,6 +155,7 @@ async function processWebhook(req: Request, res: Response) {
           where: { nombaAccountNo: event.receivingAccountNumber },
           include: {
             collection: true,
+            payer: { select: { fullName: true } },
             payerInstallments: {
               where: { status: { in: ['pending', 'partial', 'overdue'] } },
               orderBy: { dueAt: 'asc' },
@@ -216,6 +219,7 @@ async function processWebhook(req: Request, res: Response) {
       payer: { bankAccounts: { some: { accountNumber: senderAccountNumber } } },
     },
     include: {
+      payer: { select: { fullName: true } },
       payerInstallments: {
         where: { status: { in: ['pending', 'partial', 'overdue'] } },
         orderBy: { dueAt: 'asc' },
@@ -256,6 +260,12 @@ async function processWebhook(req: Request, res: Response) {
       },
     })
 
+    await logActivity(prisma, {
+      collectionId: collection.id,
+      type: 'payment_unmatched',
+      message: `Unmatched transfer of ₦${amountNGN.toLocaleString()} landed from ${senderName} (${senderAccountNumber} · ${senderBank})`,
+    })
+
     res.sendStatus(200)
     return
   }
@@ -290,6 +300,7 @@ async function recordMatchedPayment(
     collectionId: string
     totalPaid: Prisma.Decimal
     creditBalance: Prisma.Decimal
+    payer: { fullName: string }
     payerInstallments: Array<{ id: string; amountDue: Prisma.Decimal; amountPaid: Prisma.Decimal; status: string }>
   },
   collection: { id: string; ownerId: string; name: string; repaymentType: string; chargeAmount: Prisma.Decimal },
@@ -343,6 +354,14 @@ async function recordMatchedPayment(
           referenceId: enrollment.id,
         },
       ],
+    })
+
+    await logActivity(tx, {
+      collectionId: collection.id,
+      type: 'payment_matched',
+      message: `${enrollment.payer.fullName} paid ₦${payment.amountNGN.toLocaleString()} (from ${payment.senderName}, ${payment.senderAccountNumber})`,
+      actorId: enrollment.payerId,
+      referenceId: enrollment.id,
     })
   })
 }

@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db'
+import { logActivity } from '@paybook/db/activity'
 
 export const EXIT_GRACE_DAYS = 7
 
@@ -60,6 +61,13 @@ export async function finalizeDueExits(scope?: {
             referenceId: enrollment.id,
           },
         ],
+      })
+
+      await logActivity(tx, {
+        collectionId: enrollment.collectionId,
+        type: 'exit_finalized',
+        message: `${enrollment.payer.fullName} is no longer a payer — the 7-day ${enrollment.exitRequestedBy === 'owner' ? 'removal' : 'exit'} grace period ended without a revoke`,
+        referenceId: enrollment.id,
       })
     })
   }

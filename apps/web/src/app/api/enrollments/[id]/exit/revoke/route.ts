@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { logActivity } from '@paybook/db/activity'
 
 // Revoke a pending exit before the 7-day grace elapses. Either party can
 // revoke (SCHEMA.md exit rules) — the enrollment returns to active and the
@@ -54,6 +55,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         referenceType: 'enrollment',
         referenceId: enrollmentId,
       },
+    })
+
+    await logActivity(tx, {
+      collectionId: enrollment.collectionId,
+      type: 'exit_revoked',
+      message: revokerIsPayer
+        ? `${enrollment.payer.fullName} revoked their exit request — they remain an active payer`
+        : `Owner revoked the removal of ${enrollment.payer.fullName} — they remain an active payer`,
+      actorId: userId,
+      referenceId: enrollmentId,
     })
   })
 

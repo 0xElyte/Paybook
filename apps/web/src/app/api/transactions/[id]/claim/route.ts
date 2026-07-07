@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { applyPayment } from '@paybook/db/payment-application'
+import { logActivity } from '@paybook/db/activity'
 import { bindSenderAccount } from '@/lib/bind-sender-account'
 
 // Payer-side counterpart of the owner's manual-assign: "this payment was me."
@@ -93,6 +94,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
           referenceId: enrollment.id,
         },
       ],
+    })
+
+    await logActivity(tx, {
+      collectionId: transaction.collectionId,
+      type: 'payment_claimed',
+      message: `${session.user.name ?? 'A payer'} claimed the ₦${amountNGN.toLocaleString()} transfer from ${transaction.senderName} (${transaction.senderAccountNumber}) — "this was me"`,
+      actorId: userId,
+      referenceId: transaction.id,
     })
   })
 

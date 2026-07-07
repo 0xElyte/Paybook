@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { logActivity } from '@paybook/db/activity'
 import { z } from 'zod'
 
 const resolveSchema = z.object({
@@ -50,6 +51,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (updated.count === 0) {
     return NextResponse.json({ error: 'This transfer has already been resolved' }, { status: 400 })
   }
+
+  const amountNGN = Number(transaction.amount)
+  await logActivity(prisma, {
+    collectionId: transaction.collectionId,
+    type: newStatus === 'accepted' ? 'transfer_accepted' : 'transfer_refunded',
+    message:
+      newStatus === 'accepted'
+        ? `Owner accepted the ₦${amountNGN.toLocaleString()} transfer from ${transaction.senderName} (${transaction.senderAccountNumber}) without matching it to a payer`
+        : `Owner marked the ₦${amountNGN.toLocaleString()} transfer from ${transaction.senderName} (${transaction.senderAccountNumber}) as refunded`,
+    actorId: session.user.id,
+    referenceId: transaction.id,
+  })
 
   return NextResponse.json({ success: true, matchStatus: newStatus })
 }

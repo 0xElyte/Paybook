@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { createVirtualAccount } from '@/lib/nomba'
 import { credentialsForOwner } from '@/lib/nomba-connection'
 import { isLinkValid } from '@/lib/invite-link'
+import { logActivity } from '@paybook/db/activity'
 import { z } from 'zod'
 import type { DurationUnit } from '@prisma/client'
 
@@ -107,6 +108,14 @@ export async function POST(req: Request) {
         referenceType: 'enrollment',
         referenceId: newEnrollment.id,
       },
+    })
+
+    await logActivity(tx, {
+      collectionId: collection.id,
+      type: 'payer_joined',
+      message: `${session.user.name ?? 'A new payer'} joined via an invite link`,
+      actorId: userId,
+      referenceId: newEnrollment.id,
     })
 
     return newEnrollment

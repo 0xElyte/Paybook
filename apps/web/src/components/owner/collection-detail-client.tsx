@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Loader2, Megaphone, Phone, TriangleAlert, UserPlus2, UserRoundX } from 'lucide-react'
+import { Banknote, Check, Loader2, LogOut, Megaphone, Phone, TriangleAlert, Undo2, UserCheck, UserPlus2, UserRoundX } from 'lucide-react'
 import { formatNGN, formatDate } from '@/lib/utils'
 import { TopNav } from '@/components/chrome/top-nav'
 import { AutoRefresh } from '@/components/chrome/auto-refresh'
@@ -61,6 +61,13 @@ interface Transaction {
   payerName: string | null
 }
 
+interface Activity {
+  id: string
+  type: string
+  message: string
+  createdAt: string
+}
+
 interface Props {
   collection: {
     id: string
@@ -77,12 +84,45 @@ interface Props {
   inviteLinks: InviteLink[]
   enrollments: Enrollment[]
   transactions: Transaction[]
+  activities: Activity[]
   ownerName: string
 }
 
-type Tab = 'payers' | 'transactions'
+type Tab = 'payers' | 'transactions' | 'log'
 
-export function CollectionDetailClient({ collection, inviteLinks, enrollments, transactions: initialTransactions, ownerName }: Props) {
+// Icon + color per activity type for the Log tab timeline.
+function activityIcon(type: string) {
+  switch (type) {
+    case 'payment_matched':
+    case 'payment_claimed':
+      return { icon: <Banknote size={14} />, className: 'bg-green/[0.14] text-green-text-2' }
+    case 'payment_unmatched':
+      return { icon: <TriangleAlert size={14} />, className: 'bg-amber/[0.15] text-amber-text' }
+    case 'transfer_matched_manually':
+      return { icon: <UserCheck size={14} />, className: 'bg-green/[0.14] text-green-text-2' }
+    case 'transfer_accepted':
+      return { icon: <Check size={14} />, className: 'bg-green/[0.14] text-green-text-2' }
+    case 'transfer_refunded':
+      return { icon: <Undo2 size={14} />, className: 'bg-red/[0.12] text-red-text' }
+    case 'payer_joined':
+      return { icon: <UserPlus2 size={14} />, className: 'bg-blue/[0.13] text-blue-text' }
+    case 'exit_requested':
+    case 'exit_revoked':
+    case 'exit_finalized':
+      return { icon: <LogOut size={14} />, className: 'bg-red/[0.12] text-red-text' }
+    case 'broadcast_sent':
+      return { icon: <Megaphone size={14} />, className: 'bg-blue/[0.13] text-blue-text' }
+    default:
+      return { icon: <Banknote size={14} />, className: 'bg-fill text-text-2' }
+  }
+}
+
+function formatLogTime(iso: string): string {
+  const d = new Date(iso)
+  return `${formatDate(iso)} · ${d.toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })}`
+}
+
+export function CollectionDetailClient({ collection, inviteLinks, enrollments, transactions: initialTransactions, activities, ownerName }: Props) {
   const { addToast } = useToast()
   const router = useRouter()
   // Land on Payers: it's the first question an owner has when opening a
@@ -280,7 +320,7 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
           <div className="grid gap-5">
             <div className="rounded-card bg-card p-1 shadow-card">
               <div className="flex gap-1 px-4.5 pt-3">
-                {(['payers', 'transactions'] as Tab[]).map((t) => (
+                {(['payers', 'transactions', 'log'] as Tab[]).map((t) => (
                   <button
                     key={t}
                     onClick={() => setTab(t)}
@@ -288,7 +328,11 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
                       tab === t ? 'border-green text-navy' : 'border-transparent text-text-muted'
                     }`}
                   >
-                    {t === 'payers' ? `Payers (${enrollments.length})` : `Transactions (${transactions.length})`}
+                    {t === 'payers'
+                      ? `Payers (${enrollments.length})`
+                      : t === 'transactions'
+                        ? `Transactions (${transactions.length})`
+                        : 'Log'}
                   </button>
                 ))}
               </div>
@@ -459,6 +503,32 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
                           </div>
                         ))}
                       </div>
+                    </div>
+                  ))}
+
+                {tab === 'log' &&
+                  (activities.length === 0 ? (
+                    <EmptyRow emoji="📜" text="Nothing has happened in this collection yet." />
+                  ) : (
+                    <div className="grid gap-0 py-1">
+                      {activities.map((a, i) => {
+                        const { icon, className } = activityIcon(a.type)
+                        return (
+                          <div key={a.id} className="relative flex gap-3 px-2 py-2.5">
+                            {/* timeline spine */}
+                            {i < activities.length - 1 && (
+                              <span aria-hidden className="absolute top-9 left-[22.5px] h-[calc(100%-24px)] w-px bg-border" />
+                            )}
+                            <span className={`relative z-10 mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full ${className}`}>
+                              {icon}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[13px] leading-snug text-text-2">{a.message}</p>
+                              <p className="mt-0.5 text-[11.5px] text-text-faint">{formatLogTime(a.createdAt)}</p>
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   ))}
               </div>

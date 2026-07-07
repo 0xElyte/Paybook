@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { applyPayment } from '@paybook/db/payment-application'
+import { logActivity } from '@paybook/db/activity'
 import { bindSenderAccount } from '@/lib/bind-sender-account'
 import { z } from 'zod'
 
@@ -101,6 +102,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           referenceId: enrollment.id,
         },
       ],
+    })
+
+    await logActivity(tx, {
+      collectionId: transaction.collectionId,
+      type: 'transfer_matched_manually',
+      message: `Owner matched the ₦${amountNGN.toLocaleString()} transfer from ${transaction.senderName} (${transaction.senderAccountNumber}) to ${enrollment.payer.fullName}`,
+      actorId: session.user.id,
+      referenceId: transaction.id,
     })
   })
 

@@ -79,6 +79,21 @@ enum NotificationType {
   payer_joined
 }
 
+// Per-collection audit trail rendered in the owner's Log tab.
+enum ActivityType {
+  payment_matched // webhook auto-matched a transfer to a payer
+  payment_unmatched // a transfer landed that no registered payer matches
+  payment_claimed // a payer pressed "This was me" on an unmatched transfer
+  transfer_matched_manually // owner matched an unmatched transfer to a payer
+  transfer_accepted // owner kept an unmatched transfer without attribution
+  transfer_refunded // owner marked an unmatched transfer as refunded
+  payer_joined
+  exit_requested
+  exit_revoked
+  exit_finalized
+  broadcast_sent
+}
+
 enum TokenPurpose {
   email_verification
   password_reset
@@ -180,12 +195,30 @@ model Collection {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  owner         User           @relation("CollectionOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  owner         User                 @relation("CollectionOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   installments  Installment[]
   inviteLinks   InviteLink[]
   enrollments   Enrollment[]
   transactions  Transaction[]
   announcements Announcement[]
+  activities    CollectionActivity[]
+}
+
+// Append-only activity feed per collection ("Log" tab): payments landing and
+// matching, unmatched-transfer resolutions, joins, exits, broadcasts. Message
+// text is composed at write time and rendered verbatim.
+model CollectionActivity {
+  id           String       @id @default(uuid())
+  collectionId String
+  type         ActivityType
+  message      String
+  actorId      String? // user who performed the action; null for webhook/system events
+  referenceId  String? // transaction / enrollment / announcement id, for future deep-linking
+  createdAt    DateTime     @default(now())
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@index([collectionId, createdAt(sort: Desc)])
 }
 
 model Installment {

@@ -10,6 +10,10 @@
     "./payment-application": {
       "types": "./src/payment-application.ts",
       "default": "./src/payment-application.ts"
+    },
+    "./activity": {
+      "types": "./src/activity.ts",
+      "default": "./src/activity.ts"
     }
   },
   "scripts": {

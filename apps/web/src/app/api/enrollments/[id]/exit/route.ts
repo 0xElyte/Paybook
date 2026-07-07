@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { payerHasOutstanding, EXIT_GRACE_DAYS } from '@/lib/exit'
+import { logActivity } from '@paybook/db/activity'
 
 // Start an exit: the payer requesting to leave, or the owner removing a payer.
 // Either way a 7-day grace window opens, the other party is notified, and the
@@ -89,6 +90,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
             referenceType: 'enrollment',
             referenceId: enrollmentId,
           },
+    })
+
+    await logActivity(tx, {
+      collectionId: enrollment.collection.id,
+      type: 'exit_requested',
+      message: isPayer
+        ? `${enrollment.payer.fullName} requested to leave (finalizes in ${EXIT_GRACE_DAYS} days unless revoked)`
+        : `Owner initiated the removal of ${enrollment.payer.fullName} (finalizes in ${EXIT_GRACE_DAYS} days unless revoked)`,
+      actorId: userId,
+      referenceId: enrollmentId,
     })
   })
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { logActivity } from '@paybook/db/activity'
 import { z } from 'zod'
 
 const broadcastSchema = z.object({
@@ -81,6 +82,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         referenceType: 'announcement',
         referenceId: created.id,
       })),
+    })
+
+    await logActivity(tx, {
+      collectionId,
+      type: 'broadcast_sent',
+      message: `Owner sent a broadcast to ${validPayerIds.length === activeCount ? 'all' : validPayerIds.length} payer${validPayerIds.length === 1 ? '' : 's'}: "${body.length > 80 ? body.slice(0, 80) + '…' : body}"`,
+      actorId: session.user.id,
+      referenceId: created.id,
     })
 
     return created

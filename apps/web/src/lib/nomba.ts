@@ -192,6 +192,16 @@ export interface NombaVirtualAccount {
   createdAt: string
 }
 
+// The LIVE API rejects account names containing anything beyond letters,
+// digits and spaces ("Account name must not contain special characters" —
+// confirmed 2026-07-07; the sandbox accepted hyphens). Sanitize at this
+// boundary so no caller can trip it, and re-pad to the 8-char minimum in case
+// stripping shortened the name.
+function sanitizeAccountName(name: string): string {
+  const cleaned = name.replace(/[^a-zA-Z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return (cleaned.length < 8 ? `Paybook ${cleaned}` : cleaned).slice(0, 64).trim()
+}
+
 export async function createVirtualAccount(
   params: {
     accountRef: string // our collection.id or enrollment.id; must be 16-64 chars (UUID = 36 OK)
@@ -209,7 +219,7 @@ export async function createVirtualAccount(
     method: 'POST',
     body: JSON.stringify({
       accountRef: params.accountRef,
-      accountName: params.accountName,
+      accountName: sanitizeAccountName(params.accountName),
       // expiryDate omitted -> permanent static virtual account
       // expectedAmount omitted -> part_payment/installment Collections accept any amount
     }),

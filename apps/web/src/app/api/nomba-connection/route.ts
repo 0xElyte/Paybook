@@ -53,6 +53,16 @@ export async function POST(req: Request) {
     )
   }
 
+  // JWT sessions can outlive their User row (e.g. after a data reset) — verify
+  // the account still exists before writing anything keyed on it.
+  const userExists = await prisma.user.findUnique({ where: { id: session.user.id }, select: { id: true } })
+  if (!userExists) {
+    return NextResponse.json(
+      { error: 'Your login session is no longer valid. Please log out and sign in (or register) again.' },
+      { status: 401 }
+    )
+  }
+
   try {
     const connection = await prisma.nombaConnection.upsert({
       where: { ownerId: session.user.id },

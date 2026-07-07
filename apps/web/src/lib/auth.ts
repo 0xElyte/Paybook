@@ -4,6 +4,7 @@ import type { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@paybook/db'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
+import { authConfig } from './auth.config'
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -11,10 +12,7 @@ const credentialsSchema = z.object({
 })
 
 const config: NextAuthConfig = {
-  session: { strategy: 'jwt' },
-  pages: {
-    signIn: '/login',
-  },
+  ...authConfig,
   providers: [
     Credentials({
       credentials: {
@@ -46,24 +44,6 @@ const config: NextAuthConfig = {
       },
     }),
   ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id
-        token.role = (user as { role?: string }).role
-        token.emailVerified = (user as { emailVerified?: Date | null }).emailVerified ?? null
-      }
-      return token
-    },
-    async session({ session, token }) {
-      if (token) {
-        session.user.id = token.id as string
-        session.user.role = token.role as string
-        session.user.emailVerified = (token.emailVerified as Date | null) ?? null
-      }
-      return session
-    },
-  },
 }
 
 const nextAuth: NextAuthResult = NextAuth(config)

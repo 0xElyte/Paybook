@@ -1,5 +1,17 @@
-import { auth } from '@/lib/auth'
-import { NextResponse } from 'next/server'
+import NextAuth, { type Session } from 'next-auth'
+import { NextResponse, type NextRequest } from 'next/server'
+import { authConfig } from '@/lib/auth.config'
+
+// Instantiated from the edge-safe config, NOT lib/auth.ts — importing the full
+// config would pull Prisma + bcryptjs into the Edge bundle and blow the 1 MB
+// middleware size limit. JWT session checks only need the cookie + AUTH_SECRET.
+// Explicit portable type for the same TS2742 reason documented in lib/auth.ts.
+type AugmentedRequest = NextRequest & { auth: Session | null }
+type AuthMiddlewareFn = (req: AugmentedRequest, ctx?: unknown) =>
+  NextResponse | Response | void | Promise<NextResponse | Response | void>
+
+const auth: (callback: AuthMiddlewareFn) => (req: NextRequest, ctx?: unknown) => Promise<Response> =
+  NextAuth(authConfig).auth as never
 
 export default auth((req) => {
   const { pathname } = req.nextUrl

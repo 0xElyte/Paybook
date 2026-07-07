@@ -9,6 +9,7 @@ import { TopNav } from '@/components/chrome/top-nav'
 import { AutoRefresh } from '@/components/chrome/auto-refresh'
 import { DashboardTabs } from '@/components/chrome/dashboard-tabs'
 import { finalizeDueExits } from '@/lib/exit'
+import { markOverdueInstallments } from '@/lib/overdue'
 import { AnimatedCounter } from '@/components/ui/animated-counter'
 import { MonoAccountNumber } from '@/components/ui/mono-account-number'
 import { StatusBadge, toneForStatus } from '@/components/ui/status-badge'
@@ -42,6 +43,8 @@ export default async function HomePage() {
   await Promise.all([
     finalizeDueExits({ payerId: userId }),
     finalizeDueExits({ collectionOwnerId: userId }),
+    markOverdueInstallments({ payerId: userId }),
+    markOverdueInstallments({ collectionOwnerId: userId }),
   ])
 
   const [collections, enrollments, recentActivity] = await Promise.all([

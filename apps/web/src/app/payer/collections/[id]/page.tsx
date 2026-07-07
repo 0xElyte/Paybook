@@ -13,6 +13,7 @@ import { ClaimPaymentCard } from '@/components/payer/claim-payment-card'
 import { PayModal } from '@/components/payer/pay-modal'
 import { EnrollmentActions } from '@/components/payer/enrollment-actions'
 import { finalizeDueExits } from '@/lib/exit'
+import { markOverdueInstallments } from '@/lib/overdue'
 import type { Metadata } from 'next'
 
 interface Props {
@@ -32,7 +33,7 @@ export default async function PayerCollectionDetailPage({ params }: Props) {
   const userId = session.user.id
 
   // Lazy sweep: finalize any of this payer's exits whose grace period elapsed.
-  await finalizeDueExits({ payerId: userId })
+  await Promise.all([finalizeDueExits({ payerId: userId }), markOverdueInstallments({ payerId: userId })])
 
   const enrollment = await prisma.enrollment.findUnique({
     where: { collectionId_payerId: { collectionId: id, payerId: userId } },

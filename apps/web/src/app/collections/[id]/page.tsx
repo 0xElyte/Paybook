@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { CollectionDetailClient } from '@/components/owner/collection-detail-client'
 import { finalizeDueExits } from '@/lib/exit'
+import { markOverdueInstallments } from '@/lib/overdue'
 import type { Metadata } from 'next'
 
 interface Props {
@@ -22,7 +23,7 @@ export default async function CollectionDetailPage({ params }: Props) {
   const userId = session.user.id
 
   // Lazy sweep: finalize any elapsed exit grace periods in this collection.
-  await finalizeDueExits({ collectionId: id })
+  await Promise.all([finalizeDueExits({ collectionId: id }), markOverdueInstallments({ collectionId: id })])
 
   const collection = await prisma.collection.findUnique({
     where: { id, ownerId: userId },

@@ -160,6 +160,19 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
     router.refresh()
   }
 
+  async function revokeInviteLink(linkId: string) {
+    setGeneratingLink(true)
+    const res = await fetch(`/api/collections/${collection.id}/invite-links/${linkId}`, { method: 'DELETE' })
+    setGeneratingLink(false)
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({ error: null }))) as { error: string | null }
+      setLinkError(data.error ?? 'Failed to revoke link')
+      return
+    }
+    setLocalLinks((prev) => prev.map((l) => (l.id === linkId ? { ...l, isActive: false } : l)))
+    addToast('Invite link revoked', 'Anyone holding the URL can no longer join.')
+  }
+
   async function generateInviteLink() {
     setGeneratingLink(true)
     setLinkError(null)
@@ -494,9 +507,19 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
                       {activeLink.usedCount} / {activeLink.maxUses ?? '∞'} joined
                     </span>
                   </div>
-                  <Button variant="outline" onClick={() => copyLink(activeLink.token, activeLink.id)} className="h-11 w-full text-[13.5px]">
-                    {copiedId === activeLink.id ? 'Copied!' : 'Copy link'}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => copyLink(activeLink.token, activeLink.id)} className="h-11 flex-1 text-[13.5px]">
+                      {copiedId === activeLink.id ? 'Copied!' : 'Copy link'}
+                    </Button>
+                    <button
+                      type="button"
+                      disabled={generatingLink}
+                      onClick={() => revokeInviteLink(activeLink.id)}
+                      className="h-11 rounded-control border-[1.5px] border-red/30 px-3.5 text-[13px] font-bold text-red-text transition-colors hover:bg-red/[0.06] disabled:opacity-60"
+                    >
+                      Revoke
+                    </button>
+                  </div>
                 </>
               ) : (
                 <p className="mb-3 text-[13px] text-text-muted">No active invite link. Generate one below.</p>

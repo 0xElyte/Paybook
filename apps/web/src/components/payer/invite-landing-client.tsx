@@ -69,7 +69,7 @@ export function InviteLandingClient({ link, collection }: Props) {
       if (res.status === 409) {
         // Already enrolled — not an error worth stranding them on; take them home.
         addToast('Already joined', `You're already a member of ${collection.name}.`)
-        router.push('/')
+        router.push('/dashboard')
         return
       }
       setError(msg ?? 'Failed to join collection')
@@ -79,7 +79,7 @@ export function InviteLandingClient({ link, collection }: Props) {
 
     setStep('done')
     addToast("You're in!", `You've joined ${collection.name}.`)
-    setTimeout(() => router.push('/'), 4000)
+    setTimeout(() => router.push('/dashboard'), 4000)
   }
 
   // Auto-join the moment we come back authenticated from account creation

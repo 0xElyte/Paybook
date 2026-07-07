@@ -177,7 +177,7 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
       <AutoRefresh />
 
       <main className="relative z-10 mx-auto max-w-[1040px] px-6 py-7 pb-20">
-        <Link href="/" className="mb-[18px] flex w-fit items-center gap-1.5 text-sm font-bold text-text-2 hover:text-text">
+        <Link href="/dashboard" className="mb-[18px] flex w-fit items-center gap-1.5 text-sm font-bold text-text-2 hover:text-text">
           ← Back to dashboard
         </Link>
 

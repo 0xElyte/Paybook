@@ -19,15 +19,15 @@ import { Reveal } from './reveal'
 // Signed-out '/' — the front door. Everything here is hand-drawn in brand
 // colors (no stock imagery): the hero is a live-feeling product vignette, and
 // every section reveals on scroll via the Reveal wrapper.
-export function LandingPage() {
+export function LandingPage({ authenticated = false }: { authenticated?: boolean }) {
   return (
     <div className="relative overflow-x-clip bg-surface text-text">
-      <SiteNav />
-      <Hero />
+      <SiteNav authenticated={authenticated} />
+      <Hero authenticated={authenticated} />
       <HowItWorks />
       <Features />
       <Personas />
-      <CtaBand />
+      <CtaBand authenticated={authenticated} />
       <SiteFooter />
     </div>
   )
@@ -35,7 +35,7 @@ export function LandingPage() {
 
 /* ─── Nav ──────────────────────────────────────────────────────────────────── */
 
-function SiteNav() {
+function SiteNav({ authenticated }: { authenticated: boolean }) {
   return (
     <header className="sticky top-0 z-50 border-b border-border/70 bg-surface/80 backdrop-blur-[12px]">
       <div className="mx-auto flex h-[68px] max-w-[1180px] items-center gap-8 px-6">
@@ -55,16 +55,28 @@ function SiteNav() {
           </a>
         </nav>
         <div className="ml-auto flex items-center gap-3">
-          <Link href="/login" className="rounded-control px-4 py-2.5 text-sm font-bold text-text-2 transition-colors hover:bg-fill">
-            Sign in
-          </Link>
-          <Link
-            href="/register"
-            className="shadow-green-cta flex h-10 items-center gap-1.5 rounded-control bg-green px-4 text-sm font-extrabold text-navy transition-all hover:scale-[1.03] active:scale-[0.97]"
-          >
-            Get started
-            <ArrowRight size={15} strokeWidth={2.6} />
-          </Link>
+          {authenticated ? (
+            <Link
+              href="/dashboard"
+              className="shadow-green-cta flex h-10 items-center gap-1.5 rounded-control bg-green px-4 text-sm font-extrabold text-navy transition-all hover:scale-[1.03] active:scale-[0.97]"
+            >
+              Go to dashboard
+              <ArrowRight size={15} strokeWidth={2.6} />
+            </Link>
+          ) : (
+            <>
+              <Link href="/login" className="rounded-control px-4 py-2.5 text-sm font-bold text-text-2 transition-colors hover:bg-fill">
+                Sign in
+              </Link>
+              <Link
+                href="/register"
+                className="shadow-green-cta flex h-10 items-center gap-1.5 rounded-control bg-green px-4 text-sm font-extrabold text-navy transition-all hover:scale-[1.03] active:scale-[0.97]"
+              >
+                Get started
+                <ArrowRight size={15} strokeWidth={2.6} />
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </header>
@@ -73,7 +85,7 @@ function SiteNav() {
 
 /* ─── Hero ─────────────────────────────────────────────────────────────────── */
 
-function Hero() {
+function Hero({ authenticated }: { authenticated: boolean }) {
   return (
     <section className="landing-grid-bg relative">
       {/* ambient orbs */}
@@ -120,10 +132,10 @@ function Hero() {
           <Reveal delay={240}>
             <div className="flex flex-wrap items-center gap-4">
               <Link
-                href="/register"
+                href={authenticated ? '/dashboard' : '/register'}
                 className="shadow-green-cta group flex h-[54px] items-center gap-2 rounded-[14px] bg-green px-7 text-[15.5px] font-extrabold text-navy transition-all hover:scale-[1.03] hover:shadow-[0_16px_36px_rgba(0,217,126,0.45)] active:scale-[0.97]"
               >
-                Start collecting — it&apos;s free
+                {authenticated ? 'Go to your dashboard' : 'Start collecting — it\u2019s free'}
                 <ArrowRight size={18} strokeWidth={2.6} className="transition-transform group-hover:translate-x-0.5" />
               </Link>
               <a
@@ -449,7 +461,7 @@ function Personas() {
 
 /* ─── CTA band ─────────────────────────────────────────────────────────────── */
 
-function CtaBand() {
+function CtaBand({ authenticated }: { authenticated: boolean }) {
   return (
     <section className="relative px-6 py-24">
       <Reveal direction="scale">
@@ -468,10 +480,10 @@ function CtaBand() {
               finish reading this sentence.
             </p>
             <Link
-              href="/register"
+              href={authenticated ? '/dashboard' : '/register'}
               className="shadow-green-cta group inline-flex h-[56px] items-center gap-2 rounded-[14px] bg-green px-8 text-[16px] font-extrabold text-navy transition-all hover:scale-[1.04] hover:shadow-[0_18px_44px_rgba(0,217,126,0.5)] active:scale-[0.97]"
             >
-              Create your free account
+              {authenticated ? 'Open your dashboard' : 'Create your free account'}
               <ArrowRight size={18} strokeWidth={2.6} className="transition-transform group-hover:translate-x-0.5" />
             </Link>
             <p className="mt-5 font-mono text-[12px] tracking-[0.18em] text-white/40">COLLECT SMARTER</p>

@@ -8,8 +8,8 @@ import { signOut } from 'next-auth/react'
 import { NotificationDrawer } from './notification-drawer'
 
 const ownerLinks = [
-  { href: '/', label: 'Dashboard' },
-  { href: '/', label: 'Collections' },
+  { href: '/dashboard', label: 'Dashboard' },
+  { href: '/dashboard', label: 'Collections' },
   { href: '/payouts', label: 'Payouts' },
   { href: '/announcements', label: 'Announcements' },
 ]

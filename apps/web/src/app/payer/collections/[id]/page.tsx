@@ -59,7 +59,7 @@ export default async function PayerCollectionDetailPage({ params }: Props) {
 
       <main className="relative z-10 mx-auto max-w-[820px] px-6 py-7 pb-20">
         <Link
-          href="/"
+          href="/dashboard"
           className="mb-[18px] flex items-center gap-1.5 text-sm font-bold text-text-2 transition-colors hover:text-text"
         >
           <ArrowLeft size={17} />

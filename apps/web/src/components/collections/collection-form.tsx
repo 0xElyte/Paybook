@@ -135,7 +135,7 @@ export function CollectionForm() {
       <div className="mb-6 flex items-center gap-3">
         <button
           type="button"
-          onClick={() => router.push('/')}
+          onClick={() => router.push('/dashboard')}
           className="grid h-10 w-10 place-items-center rounded-[11px] border-[1.5px] border-border bg-card text-text-2 transition-colors hover:bg-fill"
         >
           <ArrowLeft size={18} />

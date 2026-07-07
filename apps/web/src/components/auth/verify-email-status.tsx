@@ -55,7 +55,7 @@ export function VerifyEmailStatus({ token }: { token: string | null }) {
           </div>
           <h1 className="mb-1.5 text-xl font-extrabold">Email verified</h1>
           <p className="mb-6 text-[15px] text-text-muted">Your email address is confirmed.</p>
-          <Link href="/" className="text-sm font-bold text-green-text-2 hover:underline">
+          <Link href="/dashboard" className="text-sm font-bold text-green-text-2 hover:underline">
             Go to dashboard →
           </Link>
         </>
@@ -68,7 +68,7 @@ export function VerifyEmailStatus({ token }: { token: string | null }) {
           </div>
           <h1 className="mb-1.5 text-xl font-extrabold">Verification failed</h1>
           <p className="mb-6 text-[15px] text-text-muted">{message}</p>
-          <Link href="/" className="text-sm font-bold text-green-text-2 hover:underline">
+          <Link href="/dashboard" className="text-sm font-bold text-green-text-2 hover:underline">
             Go to dashboard →
           </Link>
         </>

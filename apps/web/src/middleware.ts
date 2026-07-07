@@ -26,7 +26,7 @@ export default auth((req) => {
   }
 
   if (isAuthenticated && isPublicRoute && pathname !== '/') {
-    return NextResponse.redirect(new URL('/', req.nextUrl.origin))
+    return NextResponse.redirect(new URL('/dashboard', req.nextUrl.origin))
   }
 
   return NextResponse.next()

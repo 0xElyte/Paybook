@@ -1,22 +1,39 @@
 import { Redis } from '@upstash/redis'
 
+// ─── Credentials ─────────────────────────────────────────────────────────────
+//
+// Production model: each owner binds their OWN Nomba business account
+// (NombaConnection — accountId, clientId, clientSecret, subAccountId), so their
+// Collections' virtual accounts are created under their account and funds land
+// with them, never with Paybook. The env credentials are the platform fallback
+// (and the hackathon demo account). All call paths accept a credentials object.
+
+export interface NombaCredentials {
+  accountId: string
+  clientId: string
+  clientSecret: string
+  subAccountId: string
+}
+
+export function envNombaCredentials(): NombaCredentials {
+  return {
+    accountId: process.env.NOMBA_ACCOUNT_ID!,
+    clientId: process.env.NOMBA_CLIENT_ID!,
+    clientSecret: process.env.NOMBA_CLIENT_SECRET!,
+    subAccountId: process.env.NOMBA_SUB_ACCOUNT_ID!,
+  }
+}
+
 // ─── Token cache — Upstash Redis when configured, in-process fallback otherwise ────
 //
-// Falling back lets local/sandbox testing proceed before UPSTASH_REDIS_REST_URL /
-// UPSTASH_REDIS_REST_TOKEN are wired up. The in-memory cache is per-process only
-// (not shared with apps/webhook-service), so it must be replaced by real Upstash
-// credentials before both services rely on nombaFetch concurrently in production.
+// Keyed per Nomba account: different owners' connections cache independently.
+// Nomba docs say tokens live 30 min; cache 25 and rely on the 401-retry
+// fallback in nombaFetch() if either assumption is ever wrong.
 
-const TOKEN_KEY = 'nomba:access_token'
-// Nomba's own docs disagree on token lifetime: NOMBA_INTEGRATION.md's live-confirmed
-// note says 60 min, but the bundled Nomba integration skill (sourced from
-// developer.nomba.com) says 30 min. Cache conservatively under the shorter claim —
-// the 401-retry fallback in nombaFetch() means this was never silently broken even
-// under the old 55-min TTL, just riskier (up to 25 stale minutes) than necessary.
 const TOKEN_TTL_SECONDS = 25 * 60
 
 let _redis: Redis | null | undefined
-let memToken: { value: string; expiresAt: number } | null = null
+const memTokens = new Map<string, { value: string; expiresAt: number }>()
 
 function getRedis(): Redis | null {
   if (_redis !== undefined) return _redis
@@ -26,19 +43,24 @@ function getRedis(): Redis | null {
   return _redis
 }
 
-async function cacheToken(token: string): Promise<void> {
-  const redis = getRedis()
-  if (redis) {
-    await redis.set(TOKEN_KEY, token, { ex: TOKEN_TTL_SECONDS })
-    return
-  }
-  memToken = { value: token, expiresAt: Date.now() + TOKEN_TTL_SECONDS * 1000 }
+function tokenKey(creds: NombaCredentials): string {
+  return `nomba:access_token:${creds.accountId}`
 }
 
-async function readCachedToken(): Promise<string | null> {
+async function cacheToken(creds: NombaCredentials, token: string): Promise<void> {
   const redis = getRedis()
-  if (redis) return redis.get<string>(TOKEN_KEY)
-  if (memToken && memToken.expiresAt > Date.now()) return memToken.value
+  if (redis) {
+    await redis.set(tokenKey(creds), token, { ex: TOKEN_TTL_SECONDS })
+    return
+  }
+  memTokens.set(tokenKey(creds), { value: token, expiresAt: Date.now() + TOKEN_TTL_SECONDS * 1000 })
+}
+
+async function readCachedToken(creds: NombaCredentials): Promise<string | null> {
+  const redis = getRedis()
+  if (redis) return redis.get<string>(tokenKey(creds))
+  const cached = memTokens.get(tokenKey(creds))
+  if (cached && cached.expiresAt > Date.now()) return cached.value
   return null
 }
 
@@ -63,17 +85,17 @@ function logNombaCall(path: string, method: string, ref: string | undefined, sta
 
 // ─── Token issuance ──────────────────────────────────────────────────────────────
 
-async function issueToken(): Promise<string> {
+export async function issueToken(creds: NombaCredentials): Promise<string> {
   const res = await fetch(`${process.env.NOMBA_BASE_URL}/auth/token/issue`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      accountId: process.env.NOMBA_ACCOUNT_ID!,
+      accountId: creds.accountId,
     },
     body: JSON.stringify({
       grant_type: 'client_credentials',
-      client_id: process.env.NOMBA_CLIENT_ID!,
-      client_secret: process.env.NOMBA_CLIENT_SECRET!,
+      client_id: creds.clientId,
+      client_secret: creds.clientSecret,
     }),
   })
 
@@ -91,23 +113,24 @@ async function issueToken(): Promise<string> {
   }
   const token = json.data.access_token
 
-  await cacheToken(token)
+  await cacheToken(creds, token)
   return token
 }
 
-async function getNombaToken(): Promise<string> {
-  const cached = await readCachedToken()
+async function getNombaToken(creds: NombaCredentials): Promise<string> {
+  const cached = await readCachedToken(creds)
   if (cached) return cached
-  return issueToken()
+  return issueToken(creds)
 }
 
 // ─── nombaFetch — single entry point for ALL Nomba API calls ───────────────────
 
 export async function nombaFetch(
   path: string,
-  options: RequestInit & { _ref?: string } = {}
+  options: RequestInit & { _ref?: string; _creds?: NombaCredentials } = {}
 ): Promise<Response> {
-  const { _ref, ...fetchOptions } = options
+  const { _ref, _creds, ...fetchOptions } = options
+  const creds = _creds ?? envNombaCredentials()
   const method = (fetchOptions.method ?? 'GET').toUpperCase()
 
   const doFetch = async (token: string) =>
@@ -117,16 +140,16 @@ export async function nombaFetch(
         'Content-Type': 'application/json',
         ...(fetchOptions.headers as Record<string, string> | undefined),
         Authorization: `Bearer ${token}`,
-        accountId: process.env.NOMBA_ACCOUNT_ID!,
+        accountId: creds.accountId,
       },
     })
 
-  const token = await getNombaToken()
+  const token = await getNombaToken(creds)
   let res = await doFetch(token)
 
   // Defensive fallback: if the cached token was stale/rejected, refresh once and retry
   if (res.status === 401) {
-    const fresh = await issueToken()
+    const fresh = await issueToken(creds)
     res = await doFetch(fresh)
   }
 
@@ -136,9 +159,10 @@ export async function nombaFetch(
 
 // ─── Typed API wrappers ──────────────────────────────────────────────────────────
 //
-// NOTE: there is no createSubAccount(). Nomba pre-provisions exactly one sub-account
-// per hackathon participant (delivered via credentials email), stored as the env var
-// NOMBA_SUB_ACCOUNT_ID. Sub-accounts are never created at runtime.
+// NOTE: sub-accounts have no creation API (dashboard-only, confirmed against
+// production docs 2026-07-07). The subAccountId used as the VA-creation path
+// param comes from the owner's NombaConnection (their default), optionally
+// overridden per Collection by a dashboard-created "pocket" sub-account ID.
 
 // Field names confirmed against a live sandbox response (2026-07-02) — the
 // official API reference's `accountNumber`/`accountName` naming was wrong.
@@ -155,13 +179,17 @@ export interface NombaVirtualAccount {
   createdAt: string
 }
 
-export async function createVirtualAccount(params: {
-  accountRef: string // our collection.id; must be 16-64 chars (UUID = 36 chars OK)
-  accountName: string // must be 8-64 chars — validate at form level before calling
-}): Promise<NombaVirtualAccount> {
-  const subAccountId = process.env.NOMBA_SUB_ACCOUNT_ID
+export async function createVirtualAccount(
+  params: {
+    accountRef: string // our collection.id or enrollment.id; must be 16-64 chars (UUID = 36 OK)
+    accountName: string // must be 8-64 chars — validate at form level before calling
+    subAccountId?: string // per-Collection pocket override; defaults to the credentials' sub-account
+  },
+  creds: NombaCredentials = envNombaCredentials()
+): Promise<NombaVirtualAccount> {
+  const subAccountId = params.subAccountId ?? creds.subAccountId
   if (!subAccountId) {
-    throw new Error('NOMBA_SUB_ACCOUNT_ID environment variable is not set')
+    throw new Error('No sub-account ID available for virtual account creation')
   }
 
   const res = await nombaFetch(`/accounts/virtual/${subAccountId}`, {
@@ -173,6 +201,7 @@ export async function createVirtualAccount(params: {
       // expectedAmount omitted -> part_payment/installment Collections accept any amount
     }),
     _ref: params.accountRef,
+    _creds: creds,
   })
 
   if (!res.ok) {

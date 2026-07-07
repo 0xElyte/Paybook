@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { createVirtualAccount } from '@/lib/nomba'
+import { credentialsForOwner } from '@/lib/nomba-connection'
 import { isLinkValid } from '@/lib/invite-link'
 import { z } from 'zod'
 import type { DurationUnit } from '@prisma/client'
@@ -120,10 +121,17 @@ export async function POST(req: Request) {
   let payerAccount: { nombaAccountNo: string; nombaBankName: string } | null = null
   if (process.env.NOMBA_VA_STRATEGY === 'per_payer') {
     try {
-      const account = await createVirtualAccount({
-        accountRef: enrollment.id,
-        accountName: `Paybook - ${collection.name}`.slice(0, 64),
-      })
+      // Signed with the OWNER's bound Nomba account — the payer's personal VA
+      // routes into the collection owner's own money, not Paybook's.
+      const creds = await credentialsForOwner(collection.ownerId)
+      const account = await createVirtualAccount(
+        {
+          accountRef: enrollment.id,
+          accountName: `Paybook - ${collection.name}`.slice(0, 64),
+          subAccountId: collection.nombaSubAccountId ?? undefined,
+        },
+        creds
+      )
       const updated = await prisma.enrollment.update({
         where: { id: enrollment.id },
         data: {

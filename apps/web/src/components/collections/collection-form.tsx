@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
 import { formatNGN } from '@/lib/utils'
 import { InstallmentBuilder } from './installment-builder'
+import { LinkNombaCard } from './link-nomba-card'
 import { SuccessScreen } from './success-screen'
 
 const repaymentTypes: { value: CollectionInput['repaymentType']; label: string; hint: string; icon: React.ReactNode }[] = [
@@ -24,9 +25,10 @@ const defaultInstallments: InstallmentInput[] = [
 
 const stepLabels = ['Details', 'Repayment', 'Schedule', 'Review']
 
-export function CollectionForm() {
+export function CollectionForm({ nombaLinked = true }: { nombaLinked?: boolean }) {
   const router = useRouter()
   const { addToast } = useToast()
+  const [linked, setLinked] = useState(nombaLinked)
   const [step, setStep] = useState(1)
 
   const [name, setName] = useState('')
@@ -36,6 +38,8 @@ export function CollectionForm() {
   const [durationUnit, setDurationUnit] = useState<CollectionInput['durationUnit']>('months')
   const [repaymentType, setRepaymentType] = useState<CollectionInput['repaymentType']>('one_time')
   const [installments, setInstallments] = useState<InstallmentInput[]>(defaultInstallments)
+  const [hasPocket, setHasPocket] = useState(false)
+  const [pocketId, setPocketId] = useState('')
 
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -83,6 +87,7 @@ export function CollectionForm() {
       durationUnit,
       repaymentType,
       installments: repaymentType === 'installment' ? installments : undefined,
+      nombaSubAccountId: hasPocket && pocketId.trim() ? pocketId.trim() : undefined,
     }
 
     const res = await fetch('/api/collections', {
@@ -146,6 +151,10 @@ export function CollectionForm() {
         </div>
       </div>
 
+      {!linked && <LinkNombaCard onLinked={() => setLinked(true)} />}
+
+      {linked && (
+        <>
       <div className="mb-2 h-1.5 overflow-hidden rounded-pill bg-border">
         <div className="h-full rounded-pill bg-gradient-to-r from-green-deep to-green transition-all duration-400" style={{ width: `${stepPct}%` }} />
       </div>
@@ -214,11 +223,38 @@ export function CollectionForm() {
               </select>
             </div>
           </div>
+          {/* Optional Nomba sub-account "pocket" — dashboard-created (Nomba has
+              no sub-account creation API), gives this Collection its own
+              segregated balance instead of the default settlement pocket. */}
+          <label className="mt-5 flex w-fit cursor-pointer items-center gap-2.5 text-[13.5px] font-semibold text-text-2">
+            <input
+              type="checkbox"
+              checked={hasPocket}
+              onChange={(e) => setHasPocket(e.target.checked)}
+              className="h-4 w-4 accent-[#00D97E]"
+            />
+            I have a sub-account ID for this collection
+          </label>
+          {hasPocket && (
+            <div className="animate-card-in mt-3">
+              <FloatingInput
+                label="Nomba sub-account ID"
+                value={pocketId}
+                onChange={(e) => setPocketId(e.target.value)}
+                autoComplete="off"
+              />
+              <p className="mt-1.5 text-[12px] leading-snug text-text-muted">
+                Create one in your Nomba dashboard (Accounts → Sub-accounts) to keep this collection&apos;s funds in
+                their own pocket. Leave unchecked to settle into your default sub-account.
+              </p>
+            </div>
+          )}
+
           <div className="mt-[26px] flex justify-end">
             <Button
               variant="navy"
               onClick={next}
-              disabled={!name || name.length < 3 || !chargeAmount || Number(chargeAmount) <= 0}
+              disabled={!name || name.length < 3 || !chargeAmount || Number(chargeAmount) <= 0 || (hasPocket && pocketId.trim().length < 8)}
             >
               Continue →
             </Button>
@@ -337,6 +373,8 @@ export function CollectionForm() {
             </Button>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   )

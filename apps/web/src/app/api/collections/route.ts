@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { createVirtualAccount } from '@/lib/nomba'
+import { credentialsForOwner } from '@/lib/nomba-connection'
 import { collectionSchema } from '@/lib/validations/collection'
 
 export async function POST(req: Request) {
@@ -20,8 +21,19 @@ export async function POST(req: Request) {
     )
   }
 
-  const { name, description, chargeAmount, durationValue, durationUnit, repaymentType, installments } =
+  const { name, description, chargeAmount, durationValue, durationUnit, repaymentType, installments, nombaSubAccountId } =
     parsed.data
+
+  // Production model: the owner's own bound Nomba account signs the virtual
+  // account creation, so payments land with them. Binding is required before
+  // creating a Collection (env credentials only back pre-binding demo rows).
+  const connection = await prisma.nombaConnection.findUnique({ where: { ownerId: session.user.id } })
+  if (!connection && process.env.NOMBA_REQUIRE_CONNECTION !== 'false') {
+    return NextResponse.json(
+      { error: 'Link your Nomba account before creating a collection', code: 'NOMBA_NOT_LINKED' },
+      { status: 428 }
+    )
+  }
 
   const collectionId = randomUUID() // generated up front so it can double as the Nomba accountRef
 
@@ -40,6 +52,7 @@ export async function POST(req: Request) {
             durationUnit,
             repaymentType,
             nombaAccountRef: collectionId,
+            nombaSubAccountId: nombaSubAccountId ?? null,
           },
         })
 
@@ -73,10 +86,15 @@ export async function POST(req: Request) {
   }
 
   try {
-    const account = await createVirtualAccount({
-      accountRef: collectionId,
-      accountName: `Paybook - ${name}`.slice(0, 64),
-    })
+    const creds = await credentialsForOwner(session.user.id)
+    const account = await createVirtualAccount(
+      {
+        accountRef: collectionId,
+        accountName: `Paybook - ${name}`.slice(0, 64),
+        subAccountId: nombaSubAccountId, // per-Collection pocket override, if provided
+      },
+      creds
+    )
 
     const updated = await prisma.collection.update({
       where: { id: collectionId },

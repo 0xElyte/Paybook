@@ -18,6 +18,10 @@ export const collectionSchema = z
     durationUnit: z.enum(durationUnits),
     repaymentType: z.enum(repaymentTypes),
     installments: z.array(installmentSchema).optional(),
+    // Optional dashboard-created sub-account "pocket" for this Collection —
+    // sub-accounts have no creation API, so owners paste the ID if they want
+    // Nomba-level fund segregation per Collection.
+    nombaSubAccountId: z.string().min(8).max(80).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.repaymentType !== 'installment') return

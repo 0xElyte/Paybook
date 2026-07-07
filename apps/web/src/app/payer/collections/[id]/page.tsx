@@ -10,6 +10,7 @@ import { MonoAccountNumber } from '@/components/ui/mono-account-number'
 import { CopyAccountButton } from '@/components/ui/copy-account-button'
 import { StatusBadge, toneForStatus } from '@/components/ui/status-badge'
 import { ClaimPaymentCard } from '@/components/payer/claim-payment-card'
+import { PayModal } from '@/components/payer/pay-modal'
 import type { Metadata } from 'next'
 
 interface Props {
@@ -51,6 +52,23 @@ export default async function PayerCollectionDetailPage({ params }: Props) {
           take: 5,
         })
       : []
+
+  // What's due right now: the earliest open installment's remainder, or the
+  // outstanding balance for one-time / part-payment collections.
+  const openInstallment = enrollment.payerInstallments.find((pi) =>
+    ['pending', 'partial', 'overdue'].includes(pi.status)
+  )
+  const amountDue = openInstallment
+    ? Number(openInstallment.amountDue) - Number(openInstallment.amountPaid)
+    : collection.repaymentType === 'installment'
+      ? 0
+      : Math.max(0, Number(collection.chargeAmount) - Number(enrollment.totalPaid))
+  const dueLabel = openInstallment
+    ? `Installment ${openInstallment.installment.sequenceIndex + 1} — due ${formatDate(openInstallment.dueAt).split(',')[0]}`
+    : 'Outstanding balance'
+
+  const payAccountNumber = enrollment.nombaAccountNo ?? collection.nombaAccountNo
+  const payBankName = enrollment.nombaBankName ?? collection.nombaBankName ?? 'Nomba'
 
   return (
     <div className="relative min-h-screen">
@@ -149,6 +167,17 @@ export default async function PayerCollectionDetailPage({ params }: Props) {
           </div>
 
           <div className="grid gap-4 lg:sticky lg:top-5">
+            {payAccountNumber && enrollment.status === 'active' && (
+              <PayModal
+                collectionName={collection.name}
+                bankName={payBankName}
+                accountNumber={payAccountNumber}
+                isPersonal={!!enrollment.nombaAccountNo}
+                amountDue={amountDue}
+                dueLabel={dueLabel}
+              />
+            )}
+
             {/* Per-payer VA takes precedence when provisioned (production strategy);
                 otherwise the Collection's shared virtual account. */}
             {(enrollment.nombaAccountNo ?? collection.nombaAccountNo) && (

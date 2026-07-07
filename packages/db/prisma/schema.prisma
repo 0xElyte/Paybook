@@ -96,6 +96,7 @@ model User {
   updatedAt      DateTime  @updatedAt
 
   ownedCollections       Collection[]            @relation("CollectionOwner")
+  nombaConnection        NombaConnection?
   bankAccounts           BankAccount[]
   enrollments            Enrollment[]            @relation("EnrollmentPayer")
   notifications          Notification[]
@@ -103,6 +104,23 @@ model User {
   announcements          Announcement[]          @relation("AnnouncementOwner")
   announcementRecipients AnnouncementRecipient[]
   verificationTokens     VerificationToken[]
+}
+
+// An owner's own Nomba business account, bound to Paybook. All of the owner's
+// Collections provision virtual accounts with THESE credentials, so payments
+// land in the owner's Nomba account — Paybook never holds funds. clientSecret
+// is AES-256-GCM encrypted at rest (PAYBOOK_ENCRYPTION_KEY); never logged.
+model NombaConnection {
+  id              String   @id @default(uuid())
+  ownerId         String   @unique
+  accountId       String   // parent account ID — goes in the accountId header
+  clientId        String
+  clientSecretEnc String   // AES-256-GCM: iv.ciphertext.authTag (hex)
+  subAccountId    String   // default sub-account for VA creation path param
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 }
 
 model VerificationToken {
@@ -150,6 +168,11 @@ model Collection {
   nombaAccountRef String  @unique // = this collection's id; stable join key between our DB and Nomba
   nombaAccountNo  String?
   nombaBankName   String?
+  // Optional "pocket": a sub-account the owner created in their Nomba dashboard
+  // for this specific Collection (sub-account creation has no API — dashboard
+  // only). When set, this Collection's VAs are created under it instead of the
+  // connection's default sub-account, giving real Nomba-level fund segregation.
+  nombaSubAccountId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

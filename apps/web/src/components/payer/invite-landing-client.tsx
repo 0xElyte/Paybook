@@ -47,6 +47,13 @@ export function InviteLandingClient({ link, collection }: Props) {
   const [step, setStep] = useState<Step>('overview')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The join response carries the account to pay into — the payer's own
+  // personal VA when the per-payer strategy provisioned one, else the
+  // collection's shared account.
+  const [payAccount, setPayAccount] = useState<{ accountNo: string | null; bankName: string | null }>({
+    accountNo: collection.nombaAccountNo,
+    bankName: collection.nombaBankName,
+  })
   const autoJoinFired = useRef(false)
 
   const hoursLeft = Math.max(0, Math.floor((new Date(link.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60)))
@@ -77,9 +84,16 @@ export function InviteLandingClient({ link, collection }: Props) {
       return
     }
 
+    const data = (await res.json().catch(() => null)) as {
+      collection?: { nombaAccountNo: string | null; nombaBankName: string | null }
+    } | null
+    if (data?.collection) {
+      setPayAccount({ accountNo: data.collection.nombaAccountNo, bankName: data.collection.nombaBankName })
+    }
+
     setStep('done')
     addToast("You're in!", `You've joined ${collection.name}.`)
-    setTimeout(() => router.push('/dashboard'), 4000)
+    setTimeout(() => router.push('/dashboard'), 6000)
   }
 
   // Auto-join the moment we come back authenticated from account creation
@@ -224,14 +238,15 @@ export function InviteLandingClient({ link, collection }: Props) {
       <h2 className="mb-1.5 text-xl font-extrabold">You&apos;re in!</h2>
       <p className="mb-[22px] text-sm text-text-muted">Here&apos;s where to pay. Save this account number.</p>
 
-      {collection.nombaAccountNo && (
+      {payAccount.accountNo && (
         <div className="relative overflow-hidden rounded-card bg-gradient-to-br from-navy-tint to-navy p-6 text-left text-white shadow-[0_18px_44px_rgba(15,28,63,0.35)]">
           <div className="mb-[22px] flex items-center justify-between">
             <span className="text-[11px] font-bold tracking-[0.08em] text-text-faint uppercase">
-              {collection.nombaBankName}
+              {payAccount.accountNo !== collection.nombaAccountNo ? 'Your personal account · ' : ''}
+              {payAccount.bankName}
             </span>
           </div>
-          <MonoAccountNumber accountNumber={collection.nombaAccountNo} size="md" showCopy={false} className="text-white" />
+          <MonoAccountNumber accountNumber={payAccount.accountNo} size="md" showCopy={false} className="text-white" />
           <div className="mt-1.5 text-[12.5px] text-text-faint">{collection.name}</div>
         </div>
       )}
@@ -243,7 +258,7 @@ export function InviteLandingClient({ link, collection }: Props) {
 
       <button
         type="button"
-        onClick={() => collection.nombaAccountNo && navigator.clipboard.writeText(collection.nombaAccountNo)}
+        onClick={() => payAccount.accountNo && navigator.clipboard.writeText(payAccount.accountNo)}
         className="mt-4 flex h-[52px] w-full items-center justify-center gap-2 rounded-[13px] bg-green text-[15px] font-extrabold text-navy transition-transform active:scale-[0.97]"
       >
         Copy account number

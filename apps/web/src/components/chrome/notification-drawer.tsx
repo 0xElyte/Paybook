@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { X, Bell, Banknote, Megaphone, UserPlus2, CalendarClock, LogOut } from 'lucide-react'
+import { X, Bell, Banknote, Megaphone, UserPlus2, CalendarClock, LogOut, TriangleAlert } from 'lucide-react'
 
 interface Notification {
   id: string
@@ -24,6 +24,8 @@ function timeAgo(iso: string): string {
 
 function iconFor(type: string) {
   switch (type) {
+    case 'payment_unmatched':
+      return <TriangleAlert size={17} className="text-amber-text" />
     case 'announcement':
       return <Megaphone size={17} className="text-blue-text" />
     case 'payer_joined':

@@ -43,6 +43,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       status: 'active',
     },
     include: {
+      payer: { select: { fullName: true } },
       payerInstallments: {
         where: { status: { in: ['pending', 'partial', 'overdue'] } },
         orderBy: { dueAt: 'asc' },
@@ -86,8 +87,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         {
           userId: transaction.collection.ownerId,
           type: 'payment_received',
-          title: 'Payment manually assigned',
-          body: `₦${amountNGN.toLocaleString()} in ${transaction.collection.name} was manually assigned to a payer`,
+          title: 'Payment manually matched',
+          body: `₦${amountNGN.toLocaleString()} in ${transaction.collection.name} was matched to ${enrollment.payer.fullName}. Their account ${transaction.senderAccountNumber} will auto-match from now on.`,
           referenceType: 'enrollment',
           referenceId: enrollment.id,
         },

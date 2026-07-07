@@ -67,6 +67,7 @@ enum AnnouncementTarget {
 
 enum NotificationType {
   payment_received
+  payment_unmatched
   payment_due
   payment_overdue
   exit_request

@@ -248,9 +248,9 @@ async function processWebhook(req: Request, res: Response) {
     await prisma.notification.create({
       data: {
         userId: collection.ownerId,
-        type: 'payment_received',
-        title: 'Unmatched payment received',
-        body: `₦${amountNGN.toLocaleString()} received in ${collection.name} from an unrecognized account (${senderAccountNumber}). Needs manual review.`,
+        type: 'payment_unmatched',
+        title: 'Unmatched transfer needs review',
+        body: `₦${amountNGN.toLocaleString()} arrived in ${collection.name} from ${senderName} (${senderAccountNumber} · ${senderBank}) — no registered payer matches this account. Open Unmatched Transfers on the collection page to match it.`,
         referenceType: 'collection',
         referenceId: collection.id,
       },

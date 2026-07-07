@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Loader2, Megaphone, Phone, UserPlus2, UserRoundX } from 'lucide-react'
+import { Loader2, Megaphone, Phone, TriangleAlert, UserPlus2, UserRoundX } from 'lucide-react'
 import { formatNGN, formatDate } from '@/lib/utils'
 import { TopNav } from '@/components/chrome/top-nav'
 import { AutoRefresh } from '@/components/chrome/auto-refresh'
@@ -12,6 +12,7 @@ import { StatusBadge, toneForStatus } from '@/components/ui/status-badge'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
 import { BroadcastModal } from './broadcast-modal'
+import { UnmatchedTransfersModal } from './unmatched-transfers-modal'
 import { ContactModal } from '@/components/ui/contact-modal'
 
 interface InviteLink {
@@ -101,48 +102,27 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions)
   // Keep in sync with fresh server data from AutoRefresh's polling — otherwise
-  // the optimistic update in submitAssign would permanently shadow later polls.
+  // the optimistic update in handleMatched would permanently shadow later polls.
   useEffect(() => setTransactions(initialTransactions), [initialTransactions])
-  const [assigningTxId, setAssigningTxId] = useState<string | null>(null)
-  const [selectedEnrollmentId, setSelectedEnrollmentId] = useState<string>('')
-  const [assignSubmitting, setAssignSubmitting] = useState(false)
-  const [assignError, setAssignError] = useState<string | null>(null)
+  const [unmatchedOpen, setUnmatchedOpen] = useState(false)
 
   const totalCollected = transactions.filter((tx) => tx.matchStatus === 'matched').reduce((sum, tx) => sum + tx.amount, 0)
-  const unmatchedCount = transactions.filter((tx) => tx.matchStatus === 'unmatched').length
+  const unmatchedTransfers = transactions.filter((tx) => tx.matchStatus === 'unmatched')
+  const unmatchedCount = unmatchedTransfers.length
 
-  function startAssign(txId: string) {
-    setAssigningTxId(txId)
-    setSelectedEnrollmentId('')
-    setAssignError(null)
-  }
+  // The assign endpoint only accepts active enrollments, so only offer those.
+  const matchablePayers = enrollments
+    .filter((e) => e.status === 'active')
+    .map((e) => ({ enrollmentId: e.id, payerName: e.payerName }))
 
-  async function submitAssign(txId: string) {
-    if (!selectedEnrollmentId) return
-    setAssignSubmitting(true)
-    setAssignError(null)
-
-    const res = await fetch(`/api/transactions/${txId}/assign`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enrollmentId: selectedEnrollmentId }),
-    })
-
-    setAssignSubmitting(false)
-
-    if (!res.ok) {
-      const data = (await res.json()) as { error: string }
-      setAssignError(data.error ?? 'Failed to assign')
-      return
-    }
-
-    const payer = enrollments.find((e) => e.id === selectedEnrollmentId)
+  function handleMatched(txId: string, enrollmentId: string) {
+    const payer = enrollments.find((e) => e.id === enrollmentId)
     setTransactions((prev) =>
       prev.map((tx) =>
         tx.id === txId ? { ...tx, matchStatus: 'matched', payerName: payer?.payerName ?? tx.payerName } : tx
       )
     )
-    setAssigningTxId(null)
+    router.refresh()
   }
 
   async function postExit(enrollmentId: string, path: 'exit' | 'exit/revoke', toastTitle: string, toastBody: string) {
@@ -236,6 +216,14 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
         onClose={() => setBroadcastOpen(false)}
       />
 
+      <UnmatchedTransfersModal
+        transfers={unmatchedTransfers}
+        payers={matchablePayers}
+        open={unmatchedOpen}
+        onClose={() => setUnmatchedOpen(false)}
+        onMatched={handleMatched}
+      />
+
       <main className="relative z-10 mx-auto max-w-[1040px] px-6 py-7 pb-20">
         <Link href="/dashboard" className="mb-[18px] flex w-fit items-center gap-1.5 text-sm font-bold text-text-2 hover:text-text">
           ← Back to dashboard
@@ -250,6 +238,19 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {unmatchedCount > 0 && (
+              <button
+                type="button"
+                title="Unmatched transfers"
+                onClick={() => setUnmatchedOpen(true)}
+                className="relative flex h-11 w-11 items-center justify-center rounded-control border-[1.5px] border-amber/40 bg-amber/[0.08] text-amber-text transition-all hover:scale-[1.04] active:scale-[0.97]"
+              >
+                <TriangleAlert size={18} />
+                <span className="absolute -top-1.5 -right-1.5 grid h-5 min-w-5 place-items-center rounded-full bg-amber px-1 text-[11px] font-extrabold text-navy">
+                  {unmatchedCount}
+                </span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setBroadcastOpen(true)}
@@ -434,50 +435,17 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
                               <span className="truncate font-semibold">{tx.payerName ?? '—'}</span>
                               <span className="flex items-center justify-end gap-2 text-right">
                                 <StatusBadge label={tx.matchStatus} tone={toneForStatus(tx.matchStatus).tone} />
-                                {tx.matchStatus === 'unmatched' && assigningTxId !== tx.id && (
+                                {tx.matchStatus === 'unmatched' && (
                                   <button
                                     type="button"
-                                    onClick={() => startAssign(tx.id)}
+                                    onClick={() => setUnmatchedOpen(true)}
                                     className="text-xs font-bold text-green-text-2 hover:underline"
                                   >
-                                    Assign
+                                    Match
                                   </button>
                                 )}
                               </span>
                             </div>
-
-                            {assigningTxId === tx.id && (
-                              <div className="animate-float-up mt-3 flex flex-wrap items-center gap-2 rounded-[10px] bg-surface p-3">
-                                <select
-                                  value={selectedEnrollmentId}
-                                  onChange={(e) => setSelectedEnrollmentId(e.target.value)}
-                                  className="h-9 flex-1 rounded-lg border-[1.5px] border-border bg-card px-2.5 text-[13px] outline-none focus:border-green"
-                                >
-                                  <option value="">Select payer…</option>
-                                  {enrollments.map((e) => (
-                                    <option key={e.id} value={e.id}>
-                                      {e.payerName}
-                                    </option>
-                                  ))}
-                                </select>
-                                <Button
-                                  variant="navy"
-                                  onClick={() => submitAssign(tx.id)}
-                                  disabled={!selectedEnrollmentId || assignSubmitting}
-                                  className="h-9 px-3 text-xs"
-                                >
-                                  {assignSubmitting ? 'Assigning…' : 'Confirm'}
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  onClick={() => setAssigningTxId(null)}
-                                  className="h-9 px-2.5 text-xs"
-                                >
-                                  Cancel
-                                </Button>
-                                {assignError && <p className="w-full text-xs text-red-text">{assignError}</p>}
-                              </div>
-                            )}
                           </div>
                         ))}
                       </div>
@@ -546,11 +514,19 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
             </div>
 
             {unmatchedCount > 0 && (
-              <div className="flex gap-2 rounded-[11px] border-l-[3px] border-amber bg-amber/[0.08] px-3.5 py-3.5">
+              <button
+                type="button"
+                onClick={() => setUnmatchedOpen(true)}
+                className="flex items-start gap-2 rounded-[11px] border-l-[3px] border-amber bg-amber/[0.08] px-3.5 py-3.5 text-left transition-colors hover:bg-amber/[0.14]"
+              >
+                <TriangleAlert size={15} className="mt-0.5 shrink-0 text-amber-text" />
                 <span className="text-[12.5px] leading-snug text-text-2">
-                  {unmatchedCount} unmatched transaction{unmatchedCount !== 1 ? 's' : ''} — check the Transactions tab.
+                  <span className="font-bold">
+                    {unmatchedCount} unmatched transfer{unmatchedCount !== 1 ? 's' : ''}
+                  </span>{' '}
+                  waiting for review — click to match {unmatchedCount !== 1 ? 'them' : 'it'} to a payer.
                 </span>
-              </div>
+              </button>
             )}
           </div>
         </div>

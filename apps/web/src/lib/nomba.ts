@@ -218,13 +218,14 @@ export async function createVirtualAccount(
     // expectedAmount omitted -> part_payment/installment Collections accept any amount
   })
 
-  // Two live-verified attachment points (2026-07-07): under a sub-account
-  // (`/accounts/virtual/{subAccountId}`), or directly under the parent account
-  // (`/accounts/virtual`). The hackathon live credentials are DENIED on the
-  // sub-account path ("not authorized to perform actions on this sub-account")
-  // but succeed on the root path — so on an authorization denial, fall back to
-  // the root endpoint rather than failing the collection.
-  const paths = subAccountId ? [`/accounts/virtual/${subAccountId}`, '/accounts/virtual'] : ['/accounts/virtual']
+  // Two attachment points exist: directly under the parent account
+  // (`/accounts/virtual`) or under a sub-account (`/accounts/virtual/{subAccountId}`).
+  // Live-verified 2026-07-07: the hackathon credentials SUCCEED on the root
+  // path but the sub-account path fails for them no matter what — authorization
+  // denials AND spurious "Account name must not contain special characters"
+  // errors on purely alphanumeric names. So: root first, sub-account as the
+  // fallback (for credential sets scoped the other way around).
+  const paths = ['/accounts/virtual', ...(subAccountId ? [`/accounts/virtual/${subAccountId}`] : [])]
 
   let lastError = 'no attempt made'
   for (const path of paths) {
@@ -242,9 +243,6 @@ export async function createVirtualAccount(
     if (res.ok && json?.code === '00' && json.data) return json.data
 
     lastError = `createVirtualAccount failed at ${path}: HTTP ${res.status} — ${json ? `code ${json.code}: ${json.message ?? json.description}` : text.slice(0, 200)}`
-
-    const authDenied = res.status === 403 || json?.code === '401' || json?.code === '403'
-    if (!authDenied) break // a validation error will fail everywhere — don't retry
   }
 
   throw new Error(lastError)

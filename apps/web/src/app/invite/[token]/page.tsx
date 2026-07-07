@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import Image from 'next/image'
 import { prisma } from '@/lib/db'
@@ -62,6 +63,7 @@ export default async function InvitePage({ params }: Props) {
             </p>
           </div>
         ) : (
+          <Suspense>
           <InviteLandingClient
             link={{
               id: link.id,
@@ -87,6 +89,7 @@ export default async function InvitePage({ params }: Props) {
               })),
             }}
           />
+          </Suspense>
         )}
       </div>
     </div>

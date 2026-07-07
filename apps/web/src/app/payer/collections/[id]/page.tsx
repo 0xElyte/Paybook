@@ -9,6 +9,7 @@ import { AutoRefresh } from '@/components/chrome/auto-refresh'
 import { MonoAccountNumber } from '@/components/ui/mono-account-number'
 import { CopyAccountButton } from '@/components/ui/copy-account-button'
 import { StatusBadge, toneForStatus } from '@/components/ui/status-badge'
+import { ClaimPaymentCard } from '@/components/payer/claim-payment-card'
 import type { Metadata } from 'next'
 
 interface Props {
@@ -40,6 +41,17 @@ export default async function PayerCollectionDetailPage({ params }: Props) {
   if (!enrollment) notFound()
   const { collection } = enrollment
 
+  // Unmatched payments in this collection the payer can claim as theirs
+  // (claim-and-bind — see /api/transactions/[id]/claim).
+  const unmatchedTransactions =
+    enrollment.status === 'active'
+      ? await prisma.transaction.findMany({
+          where: { collectionId: collection.id, matchStatus: 'unmatched' },
+          orderBy: { paidAt: 'desc' },
+          take: 5,
+        })
+      : []
+
   return (
     <div className="relative min-h-screen">
       <TopNav variant="payer" userName={session.user.name ?? 'there'} />
@@ -47,11 +59,11 @@ export default async function PayerCollectionDetailPage({ params }: Props) {
 
       <main className="relative z-10 mx-auto max-w-[820px] px-6 py-7 pb-20">
         <Link
-          href="/payer/collections"
+          href="/"
           className="mb-[18px] flex items-center gap-1.5 text-sm font-bold text-text-2 transition-colors hover:text-text"
         >
           <ArrowLeft size={17} />
-          Back to my collections
+          Back to dashboard
         </Link>
         <h1 className="mb-1 text-2xl font-extrabold tracking-tight">{collection.name}</h1>
         <p className="mb-6 text-sm text-text-muted">
@@ -60,6 +72,17 @@ export default async function PayerCollectionDetailPage({ params }: Props) {
 
         <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[1fr_300px]">
           <div className="grid gap-5">
+            <ClaimPaymentCard
+              transactions={unmatchedTransactions.map((tx) => ({
+                id: tx.id,
+                amount: Number(tx.amount),
+                senderName: tx.senderName,
+                senderBank: tx.senderBank,
+                senderAccountNumber: tx.senderAccountNumber,
+                paidAt: tx.paidAt.toISOString(),
+              }))}
+            />
+
             {enrollment.payerInstallments.length > 0 && (
               <div className="rounded-card bg-card p-[22px] shadow-card">
                 <h2 className="mb-4 text-base font-extrabold">Installment schedule</h2>
@@ -126,13 +149,21 @@ export default async function PayerCollectionDetailPage({ params }: Props) {
           </div>
 
           <div className="grid gap-4 lg:sticky lg:top-5">
-            {collection.nombaAccountNo && (
+            {/* Per-payer VA takes precedence when provisioned (production strategy);
+                otherwise the Collection's shared virtual account. */}
+            {(enrollment.nombaAccountNo ?? collection.nombaAccountNo) && (
               <div className="rounded-card bg-gradient-to-br from-navy-tint to-navy p-[22px] text-white shadow-[0_16px_40px_rgba(15,28,63,0.3)]">
                 <div className="mb-3.5 text-[11px] font-bold tracking-[0.08em] text-text-faint uppercase">
-                  Pay into · {collection.nombaBankName}
+                  {enrollment.nombaAccountNo ? 'Your personal account' : 'Pay into'} ·{' '}
+                  {enrollment.nombaBankName ?? collection.nombaBankName}
                 </div>
-                <MonoAccountNumber accountNumber={collection.nombaAccountNo} size="md" showCopy={false} className="mb-3.5 text-white" />
-                <CopyAccountButton accountNumber={collection.nombaAccountNo} />
+                <MonoAccountNumber
+                  accountNumber={(enrollment.nombaAccountNo ?? collection.nombaAccountNo)!}
+                  size="md"
+                  showCopy={false}
+                  className="mb-3.5 text-white"
+                />
+                <CopyAccountButton accountNumber={(enrollment.nombaAccountNo ?? collection.nombaAccountNo)!} />
               </div>
             )}
 
@@ -144,11 +175,20 @@ export default async function PayerCollectionDetailPage({ params }: Props) {
             </div>
 
             <div className="rounded-2xl bg-card p-[18px] shadow-card">
-              <div className="mb-1 text-xs text-text-muted">Your registered sending account</div>
-              <p className="text-sm font-bold">
-                {enrollment.bankAccount.bankName} — {enrollment.bankAccount.accountNumber}
-              </p>
-              <p className="text-xs text-text-muted">{enrollment.bankAccount.accountName}</p>
+              <div className="mb-1 text-xs text-text-muted">Your linked sending account</div>
+              {enrollment.bankAccount ? (
+                <>
+                  <p className="text-sm font-bold">
+                    {enrollment.bankAccount.bankName} — {enrollment.bankAccount.accountNumber}
+                  </p>
+                  <p className="text-xs text-text-muted">{enrollment.bankAccount.accountName}</p>
+                </>
+              ) : (
+                <p className="text-[12.5px] leading-snug text-text-muted">
+                  Not linked yet — it links automatically when your first payment is confirmed. Payments from that
+                  account then match to you instantly.
+                </p>
+              )}
             </div>
 
             <div className="flex gap-2 rounded-[11px] border-l-[3px] border-green bg-green/[0.07] px-3.5 py-3.5">

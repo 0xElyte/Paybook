@@ -5,7 +5,9 @@ export default auth((req) => {
   const { pathname } = req.nextUrl
   const isAuthenticated = !!req.auth
 
-  const publicRoutes = ['/login', '/register']
+  // '/' is public: signed-out visitors get the marketing landing page there
+  // (the page itself decides landing vs dashboard based on session).
+  const publicRoutes = ['/', '/login', '/register']
   const isPublicRoute = publicRoutes.includes(pathname)
   const isInviteRoute = pathname.startsWith('/invite/')
   const isApiAuthRoute = pathname.startsWith('/api/auth')
@@ -23,7 +25,7 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl)
   }
 
-  if (isAuthenticated && isPublicRoute) {
+  if (isAuthenticated && isPublicRoute && pathname !== '/') {
     return NextResponse.redirect(new URL('/', req.nextUrl.origin))
   }
 

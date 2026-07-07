@@ -83,7 +83,9 @@ export default async function CollectionDetailPage({ params }: Props) {
         id: e.id,
         payerName: e.payer.fullName,
         payerEmail: e.payer.email,
-        bankAccount: `${e.bankAccount.bankName} — ${e.bankAccount.accountNumber}`,
+        bankAccount: e.bankAccount
+          ? `${e.bankAccount.bankName} — ${e.bankAccount.accountNumber}`
+          : 'Links on first payment',
         joinedAt: e.joinedAt.toISOString(),
         totalPaid: Number(e.totalPaid),
         creditBalance: Number(e.creditBalance),

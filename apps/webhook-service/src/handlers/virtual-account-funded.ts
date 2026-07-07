@@ -131,7 +131,57 @@ async function processWebhook(req: Request, res: Response) {
     return
   }
 
-  // ── Step 4: Find which Collection received this payment ─────────────────────
+  // ── Step 4a: Per-payer virtual account (exact attribution, no matching) ─────
+  // Production strategy: each enrollment can have its own VA (accountRef ==
+  // enrollment.id). If this payment landed in one, we know the payer with
+  // certainty — skip sender matching entirely.
+  const directEnrollment =
+    (event.accountRef
+      ? await prisma.enrollment.findUnique({
+          where: { nombaAccountRef: event.accountRef },
+          include: {
+            collection: true,
+            payerInstallments: {
+              where: { status: { in: ['pending', 'partial', 'overdue'] } },
+              orderBy: { dueAt: 'asc' },
+            },
+          },
+        })
+      : null) ??
+    (event.receivingAccountNumber
+      ? await prisma.enrollment.findFirst({
+          where: { nombaAccountNo: event.receivingAccountNumber },
+          include: {
+            collection: true,
+            payerInstallments: {
+              where: { status: { in: ['pending', 'partial', 'overdue'] } },
+              orderBy: { dueAt: 'asc' },
+            },
+          },
+        })
+      : null)
+
+  if (directEnrollment) {
+    await recordMatchedPayment(directEnrollment, directEnrollment.collection, {
+      requestId: event.requestId,
+      amountNGN,
+      senderAccountNumber,
+      senderName,
+      senderBank,
+      narration,
+      paidAt,
+    })
+    logger.info('webhook.processed', {
+      requestId: event.requestId,
+      enrollmentId: directEnrollment.id,
+      amountNGN,
+      via: 'per_payer_va',
+    })
+    res.sendStatus(200)
+    return
+  }
+
+  // ── Step 4b: Shared VA — find which Collection received this payment ────────
   // Prefer accountRef (== Collection.id, set at virtual account creation — exact,
   // stable join key). Fall back to the bank account number if this payload shape
   // doesn't carry accountRef.
@@ -156,33 +206,24 @@ async function processWebhook(req: Request, res: Response) {
   }
 
   // ── Step 5: Sender-account matching ──────────────────────────────────────────
-  const matchingBankAccount = await prisma.bankAccount.findFirst({
+  // Match against ANY bank account the payer has ever had bound (claim-and-bind
+  // creates these from webhook sender details), not just the one linked on the
+  // enrollment row — a payer who paid from two accounts matches on both.
+  const enrollment = await prisma.enrollment.findFirst({
     where: {
-      accountNumber: senderAccountNumber,
-      enrollments: {
-        some: {
-          collectionId: collection.id,
-          status: 'active',
-        },
-      },
+      collectionId: collection.id,
+      status: 'active',
+      payer: { bankAccounts: { some: { accountNumber: senderAccountNumber } } },
     },
     include: {
-      enrollments: {
-        where: {
-          collectionId: collection.id,
-          status: 'active',
-        },
-        include: {
-          payerInstallments: {
-            where: { status: { in: ['pending', 'partial', 'overdue'] } },
-            orderBy: { dueAt: 'asc' },
-          },
-        },
+      payerInstallments: {
+        where: { status: { in: ['pending', 'partial', 'overdue'] } },
+        orderBy: { dueAt: 'asc' },
       },
     },
   })
 
-  if (!matchingBankAccount || matchingBankAccount.enrollments.length === 0) {
+  if (!enrollment) {
     // ── Unmatched path ─────────────────────────────────────────────────────
     logger.warn('webhook.unmatched', {
       requestId: event.requestId,
@@ -219,24 +260,64 @@ async function processWebhook(req: Request, res: Response) {
     return
   }
 
-  const enrollment = matchingBankAccount.enrollments[0]
-
   // ── Step 6: Apply payment (with recursive overpayment cascade) ──────────────
+  await recordMatchedPayment(enrollment, collection, {
+    requestId: event.requestId,
+    amountNGN,
+    senderAccountNumber,
+    senderName,
+    senderBank,
+    narration,
+    paidAt,
+  })
+
+  logger.info('webhook.processed', {
+    requestId: event.requestId,
+    enrollmentId: enrollment.id,
+    amountNGN,
+    via: 'sender_match',
+  })
+  res.sendStatus(200)
+}
+
+// Shared by both attribution paths (per-payer VA exact match, and shared-VA
+// sender matching): apply the payment, write the Transaction, notify both sides
+// — all in one DB transaction.
+async function recordMatchedPayment(
+  enrollment: {
+    id: string
+    payerId: string
+    collectionId: string
+    totalPaid: Prisma.Decimal
+    creditBalance: Prisma.Decimal
+    payerInstallments: Array<{ id: string; amountDue: Prisma.Decimal; amountPaid: Prisma.Decimal; status: string }>
+  },
+  collection: { id: string; ownerId: string; name: string; repaymentType: string; chargeAmount: Prisma.Decimal },
+  payment: {
+    requestId: string
+    amountNGN: number
+    senderAccountNumber: string
+    senderName: string
+    senderBank: string
+    narration: string | null
+    paidAt: Date
+  }
+) {
   await prisma.$transaction(async (tx) => {
-    const appliedToOverpayment = await applyPayment(tx, enrollment, collection, amountNGN)
+    const appliedToOverpayment = await applyPayment(tx, enrollment, collection, payment.amountNGN)
 
     await tx.transaction.create({
       data: {
         collectionId: collection.id,
         enrollmentId: enrollment.id,
         payerId: enrollment.payerId,
-        nombaRequestId: event.requestId!,
-        amount: amountNGN,
-        senderAccountNumber,
-        senderName,
-        senderBank,
-        narration,
-        paidAt,
+        nombaRequestId: payment.requestId,
+        amount: payment.amountNGN,
+        senderAccountNumber: payment.senderAccountNumber,
+        senderName: payment.senderName,
+        senderBank: payment.senderBank,
+        narration: payment.narration,
+        paidAt: payment.paidAt,
         matchStatus: 'matched',
         matchedAt: new Date(),
         appliedToOverpayment,
@@ -249,7 +330,7 @@ async function processWebhook(req: Request, res: Response) {
           userId: collection.ownerId,
           type: 'payment_received',
           title: 'Payment received',
-          body: `₦${amountNGN.toLocaleString()} received from ${senderName} in ${collection.name}`,
+          body: `₦${payment.amountNGN.toLocaleString()} received from ${payment.senderName} in ${collection.name}`,
           referenceType: 'enrollment',
           referenceId: enrollment.id,
         },
@@ -257,18 +338,11 @@ async function processWebhook(req: Request, res: Response) {
           userId: enrollment.payerId,
           type: 'payment_received',
           title: 'Payment confirmed',
-          body: `Your payment of ₦${amountNGN.toLocaleString()} to ${collection.name} has been received`,
+          body: `Your payment of ₦${payment.amountNGN.toLocaleString()} to ${collection.name} has been received`,
           referenceType: 'enrollment',
           referenceId: enrollment.id,
         },
       ],
     })
   })
-
-  logger.info('webhook.processed', {
-    requestId: event.requestId,
-    enrollmentId: enrollment.id,
-    amountNGN,
-  })
-  res.sendStatus(200)
 }

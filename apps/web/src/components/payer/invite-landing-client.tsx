@@ -1,10 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSession, signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { formatNGN } from '@/lib/utils'
-import { nigerianBanks } from '@/lib/nigerian-banks'
 import { FloatingInput } from '@/components/ui/floating-input'
 import { Button } from '@/components/ui/button'
 import { MonoAccountNumber } from '@/components/ui/mono-account-number'
@@ -38,28 +37,73 @@ interface Props {
   }
 }
 
-type Step = 'overview' | 'login_or_register' | 'bank_account' | 'done'
+type Step = 'overview' | 'login_or_register' | 'joining' | 'done'
 
 export function InviteLandingClient({ link, collection }: Props) {
   const { status } = useSession()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { addToast } = useToast()
   const [step, setStep] = useState<Step>('overview')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const [bankQuery, setBankQuery] = useState('')
-  const [bankCode, setBankCode] = useState('')
-  const [showBankList, setShowBankList] = useState(false)
-  const [accountNumber, setAccountNumber] = useState('')
-  const [accountName, setAccountName] = useState('')
+  const autoJoinFired = useRef(false)
 
   const hoursLeft = Math.max(0, Math.floor((new Date(link.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60)))
 
-  const bankMatches = nigerianBanks.filter((b) => b.name.toLowerCase().includes(bankQuery.toLowerCase())).slice(0, 6)
+  async function join() {
+    setLoading(true)
+    setError(null)
+    setStep('joining')
+
+    const res = await fetch('/api/enrollments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inviteToken: link.token }),
+    })
+
+    setLoading(false)
+
+    if (!res.ok) {
+      const { error: msg } = (await res.json().catch(() => ({ error: null }))) as { error: string | null }
+      if (res.status === 409) {
+        // Already enrolled — not an error worth stranding them on; take them home.
+        addToast('Already joined', `You're already a member of ${collection.name}.`)
+        router.push('/')
+        return
+      }
+      setError(msg ?? 'Failed to join collection')
+      setStep('overview')
+      return
+    }
+
+    setStep('done')
+    addToast("You're in!", `You've joined ${collection.name}.`)
+    setTimeout(() => router.push('/'), 4000)
+  }
+
+  // Auto-join the moment we come back authenticated from account creation
+  // (the register page redirects to /invite/[token]?autojoin=1) — no re-pasting
+  // the link, no extra clicks.
+  useEffect(() => {
+    if (
+      status === 'authenticated' &&
+      searchParams.get('autojoin') === '1' &&
+      !autoJoinFired.current &&
+      step === 'overview'
+    ) {
+      autoJoinFired.current = true
+      void join()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, searchParams, step])
 
   function handleStart() {
-    setStep(status === 'authenticated' ? 'bank_account' : 'login_or_register')
+    if (status === 'authenticated') {
+      void join()
+    } else {
+      setStep('login_or_register')
+    }
   }
 
   async function handleLoginAndContinue(e: React.FormEvent<HTMLFormElement>) {
@@ -72,43 +116,16 @@ export function InviteLandingClient({ link, collection }: Props) {
       password: fd.get('password') as string,
       redirect: false,
     })
-    setLoading(false)
     if (result?.error) {
+      setLoading(false)
       setError('Invalid email or password')
       return
     }
-    setStep('bank_account')
+    // Signed in — join immediately, no intermediate step.
+    await join()
   }
 
-  async function handleEnroll(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-
-    const res = await fetch('/api/enrollments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        inviteToken: link.token,
-        bankName: bankQuery,
-        bankCode,
-        accountNumber,
-        accountName,
-      }),
-    })
-
-    setLoading(false)
-
-    if (!res.ok) {
-      const { error: msg } = (await res.json()) as { error: string }
-      setError(msg ?? 'Failed to join collection')
-      return
-    }
-
-    setStep('done')
-    addToast('You\'re in!', `You've joined ${collection.name}.`)
-    setTimeout(() => router.push('/payer/collections'), 3000)
-  }
+  const registerHref = `/register?redirect=${encodeURIComponent(`/invite/${link.token}?autojoin=1`)}`
 
   if (step === 'overview') {
     return (
@@ -135,19 +152,23 @@ export function InviteLandingClient({ link, collection }: Props) {
           <StatChip label="Cycle" value={`${collection.durationValue} ${collection.durationUnit}`} />
         </div>
 
-        <Button variant="green" onClick={handleStart} className="h-14 w-full text-base">
-          Join this Collection
+        {error && <p className="mb-4 rounded-lg bg-red/10 px-3 py-2 text-sm text-red-text">{error}</p>}
+
+        <Button variant="green" onClick={handleStart} disabled={loading} className="h-14 w-full text-base">
+          {status === 'authenticated' ? 'Join this Collection' : 'Join this Collection'}
         </Button>
-        <p className="mt-4 text-center text-[13.5px] text-text-muted">
-          Already have an account?{' '}
-          <button
-            type="button"
-            onClick={() => setStep('login_or_register')}
-            className="font-bold text-green-text-2"
-          >
-            Sign in
-          </button>
-        </p>
+        {status !== 'authenticated' && (
+          <p className="mt-4 text-center text-[13.5px] text-text-muted">
+            Already have an account?{' '}
+            <button
+              type="button"
+              onClick={() => setStep('login_or_register')}
+              className="font-bold text-green-text-2"
+            >
+              Sign in
+            </button>
+          </p>
+        )}
       </div>
     )
   }
@@ -156,19 +177,22 @@ export function InviteLandingClient({ link, collection }: Props) {
     return (
       <div className="rounded-[22px] bg-card p-8 shadow-[0_1px_3px_rgba(15,28,63,0.05),0_24px_60px_rgba(15,28,63,0.12)]">
         <h2 className="mb-1.5 text-center text-xl font-extrabold">Sign in to continue</h2>
-        <p className="mb-6 text-center text-sm text-text-muted">You need a Paybook account to join {collection.name}</p>
+        <p className="mb-6 text-center text-sm text-text-muted">
+          You need a Paybook account to join {collection.name}. You&apos;ll be added the moment you&apos;re in — no
+          extra steps.
+        </p>
 
         <form onSubmit={handleLoginAndContinue} className="space-y-4">
           <FloatingInput name="email" type="email" label="Email" required />
           <FloatingInput name="password" type="password" label="Password" required error={error ?? undefined} />
           <Button type="submit" variant="navy" disabled={loading} className="w-full">
-            {loading ? 'Signing in…' : 'Sign in & continue'}
+            {loading ? 'Signing in…' : 'Sign in & join'}
           </Button>
         </form>
 
         <p className="mt-4 text-center text-sm text-text-muted">
           New to Paybook?{' '}
-          <a href={`/register?redirect=/invite/${link.token}`} className="font-bold text-green-text-2 hover:underline">
+          <a href={registerHref} className="font-bold text-green-text-2 hover:underline">
             Create an account
           </a>
         </p>
@@ -176,94 +200,12 @@ export function InviteLandingClient({ link, collection }: Props) {
     )
   }
 
-  if (step === 'bank_account') {
+  if (step === 'joining') {
     return (
-      <div className="rounded-[22px] bg-card p-8 shadow-[0_1px_3px_rgba(15,28,63,0.05),0_24px_60px_rgba(15,28,63,0.12)]">
-        <h2 className="mb-1.5 text-center text-xl font-extrabold">Register your sending account</h2>
-        <p className="mb-5 text-center text-sm text-text-muted">
-          This is the bank account you&apos;ll use to pay into {collection.name}. Payments from this account will be
-          automatically matched to you.
-        </p>
-
-        <div className="mb-[18px] flex items-start gap-2.5 rounded-[11px] border-l-[3px] border-blue bg-blue/[0.07] px-3.5 py-3.5">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="mt-0.5 shrink-0">
-            <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" stroke="#3B82F6" strokeWidth="1.7" strokeLinejoin="round" />
-            <path d="M9 12l2 2 4-4" stroke="#3B82F6" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <span className="text-[12.5px] leading-snug text-text-2">
-            We use this to automatically match your transfers to your profile. Your bank details are private and
-            never shared with the collection owner.
-          </span>
-        </div>
-
-        <form onSubmit={handleEnroll} className="space-y-4">
-          <div className="relative">
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-2">Bank name</label>
-            <input
-              value={bankQuery}
-              onChange={(e) => {
-                setBankQuery(e.target.value)
-                setBankCode('')
-                setShowBankList(true)
-              }}
-              onFocus={() => setShowBankList(true)}
-              onBlur={() => setTimeout(() => setShowBankList(false), 150)}
-              placeholder="Search your bank"
-              required
-              className="h-[50px] w-full rounded-control border-[1.5px] border-border px-4 text-[15px] outline-none focus:border-green"
-            />
-            {showBankList && bankQuery && bankMatches.length > 0 && (
-              <div className="animate-float-up absolute inset-x-0 top-[54px] z-10 max-h-[180px] overflow-y-auto rounded-control border border-border bg-card shadow-[0_12px_34px_rgba(15,28,63,0.14)]">
-                {bankMatches.map((bank) => (
-                  <button
-                    key={bank.code}
-                    type="button"
-                    onMouseDown={() => {
-                      setBankQuery(bank.name)
-                      setBankCode(bank.code)
-                      setShowBankList(false)
-                    }}
-                    className="block w-full px-4 py-2.5 text-left text-sm transition-colors hover:bg-fill"
-                  >
-                    {bank.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-[13px] font-semibold text-text-2">Account number</label>
-            <input
-              value={accountNumber}
-              onChange={(e) => setAccountNumber(e.target.value)}
-              inputMode="numeric"
-              maxLength={10}
-              placeholder="0123456789"
-              required
-              className="h-[50px] w-full rounded-control border-[1.5px] border-border px-4 font-mono text-[15px] tracking-wide outline-none focus:border-green"
-            />
-          </div>
-
-          <FloatingInput
-            label="Account name"
-            value={accountName}
-            onChange={(e) => setAccountName(e.target.value)}
-            placeholder="Your name as it appears on the account"
-            required
-          />
-
-          {error && <p className="rounded-lg bg-red/10 px-3 py-2 text-sm text-red-text">{error}</p>}
-
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={() => setStep(status === 'authenticated' ? 'overview' : 'login_or_register')} className="flex-none">
-              Back
-            </Button>
-            <Button type="submit" variant="navy" disabled={loading} className="flex-1">
-              {loading ? 'Joining…' : 'Join collection'}
-            </Button>
-          </div>
-        </form>
+      <div className="rounded-[22px] bg-card p-10 text-center shadow-[0_1px_3px_rgba(15,28,63,0.05),0_24px_60px_rgba(15,28,63,0.12)]">
+        <div className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-[3px] border-fill-2 border-t-green" />
+        <h2 className="mb-1.5 text-lg font-extrabold">Adding you to {collection.name}…</h2>
+        <p className="text-sm text-text-muted">Hang tight, this takes a second.</p>
       </div>
     )
   }
@@ -293,6 +235,11 @@ export function InviteLandingClient({ link, collection }: Props) {
           <div className="mt-1.5 text-[12.5px] text-text-faint">{collection.name}</div>
         </div>
       )}
+
+      <p className="mx-auto mt-4 max-w-[340px] text-[12.5px] leading-snug text-text-muted">
+        Pay from any bank account — your first payment gets confirmed once, and every payment after that matches to
+        you automatically.
+      </p>
 
       <button
         type="button"

@@ -1,18 +1,17 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { createVirtualAccount } from '@/lib/nomba'
 import { isLinkValid } from '@/lib/invite-link'
 import { z } from 'zod'
 import type { DurationUnit } from '@prisma/client'
 
+// Claim-and-bind model: joining requires ONLY a valid invite token. No bank
+// details are collected at enrollment — the payer's sending account binds
+// automatically at their first payment (payer claim or owner assign), sourced
+// from the webhook's own sender fields instead of self-declared form input.
 const enrollSchema = z.object({
   inviteToken: z.string().min(1),
-  bankAccountId: z.string().uuid().optional(), // use existing bank account
-  // OR provide new bank account details
-  bankName: z.string().optional(),
-  bankCode: z.string().optional(),
-  accountNumber: z.string().optional(),
-  accountName: z.string().optional(),
 })
 
 export async function POST(req: Request) {
@@ -29,10 +28,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
   }
 
-  const { inviteToken, bankAccountId, bankName, bankCode, accountNumber, accountName } = parsed.data
-
   const link = await prisma.inviteLink.findUnique({
-    where: { token: inviteToken },
+    where: { token: parsed.data.inviteToken },
     include: {
       collection: {
         include: { installments: { orderBy: { sequenceIndex: 'asc' } } },
@@ -58,39 +55,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'This collection is no longer active' }, { status: 400 })
   }
 
+  if (collection.ownerId === userId) {
+    return NextResponse.json({ error: 'You cannot join your own collection' }, { status: 400 })
+  }
+
   const existingEnrollment = await prisma.enrollment.findUnique({
     where: { collectionId_payerId: { collectionId: collection.id, payerId: userId } },
   })
 
   if (existingEnrollment) {
     return NextResponse.json({ error: 'You are already enrolled in this collection' }, { status: 409 })
-  }
-
-  let resolvedBankAccountId: string
-
-  if (bankAccountId) {
-    const existing = await prisma.bankAccount.findFirst({
-      where: { id: bankAccountId, userId },
-    })
-    if (!existing) {
-      return NextResponse.json({ error: 'Bank account not found' }, { status: 404 })
-    }
-    resolvedBankAccountId = bankAccountId
-  } else {
-    if (!bankName || !bankCode || !accountNumber || !accountName) {
-      return NextResponse.json(
-        { error: 'Bank account details are required (bankName, bankCode, accountNumber, accountName)' },
-        { status: 400 }
-      )
-    }
-
-    const upsertedAccount = await prisma.bankAccount.upsert({
-      where: { accountNumber_bankCode_userId: { accountNumber, bankCode, userId } },
-      update: {}, // already exists — use it as-is
-      create: { userId, bankName, bankCode, accountNumber, accountName },
-    })
-
-    resolvedBankAccountId = upsertedAccount.id
   }
 
   const joinedAt = new Date()
@@ -100,7 +74,6 @@ export async function POST(req: Request) {
       data: {
         collectionId: collection.id,
         payerId: userId,
-        bankAccountId: resolvedBankAccountId,
         joinedAt,
       },
     })
@@ -138,11 +111,32 @@ export async function POST(req: Request) {
     return newEnrollment
   })
 
-  // First collection a payer joins flips their role from the 'owner' default, if applicable.
-  await prisma.user.updateMany({
-    where: { id: userId, role: 'owner' },
-    data: { role: 'both' },
-  })
+  // Production strategy (NOMBA_VA_STRATEGY=per_payer): give this payer their own
+  // dedicated virtual account for exact webhook attribution — no sender matching
+  // needed. The sandbox caps VAs at 2 per account holder, so the hackathon runs
+  // the shared strategy (this block skipped) with claim-and-bind as the matcher.
+  // Best-effort: if provisioning fails, the payer still pays into the
+  // Collection's shared account and claim-and-bind covers them.
+  let payerAccount: { nombaAccountNo: string; nombaBankName: string } | null = null
+  if (process.env.NOMBA_VA_STRATEGY === 'per_payer') {
+    try {
+      const account = await createVirtualAccount({
+        accountRef: enrollment.id,
+        accountName: `Paybook - ${collection.name}`.slice(0, 64),
+      })
+      const updated = await prisma.enrollment.update({
+        where: { id: enrollment.id },
+        data: {
+          nombaAccountRef: enrollment.id,
+          nombaAccountNo: account.bankAccountNumber,
+          nombaBankName: account.bankName,
+        },
+      })
+      payerAccount = { nombaAccountNo: updated.nombaAccountNo!, nombaBankName: updated.nombaBankName! }
+    } catch (err) {
+      console.error('Per-payer virtual account provisioning failed (continuing with shared account):', err)
+    }
+  }
 
   return NextResponse.json(
     {
@@ -150,8 +144,9 @@ export async function POST(req: Request) {
       collection: {
         id: collection.id,
         name: collection.name,
-        nombaAccountNo: collection.nombaAccountNo,
-        nombaBankName: collection.nombaBankName,
+        // Payer's own VA takes precedence when provisioned (per-payer strategy)
+        nombaAccountNo: payerAccount?.nombaAccountNo ?? collection.nombaAccountNo,
+        nombaBankName: payerAccount?.nombaBankName ?? collection.nombaBankName,
       },
     },
     { status: 201 }

@@ -3,43 +3,38 @@ import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { applyPayment } from '@paybook/db/payment-application'
 import { bindSenderAccount } from '@/lib/bind-sender-account'
-import { z } from 'zod'
 
-const assignSchema = z.object({
-  enrollmentId: z.string().uuid(),
-})
-
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+// Payer-side counterpart of the owner's manual-assign: "this payment was me."
+// Applies the payment to the claimer's own enrollment AND binds the sender
+// account from the webhook so every future transfer auto-matches. The owner is
+// notified of the claim and can always re-review via their transactions tab.
+export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  const userId = session.user.id
 
   const { id: transactionId } = await params
-
-  const body = (await req.json()) as unknown
-  const parsed = assignSchema.safeParse(body)
-  if (!parsed.success) {
-    return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
-  }
 
   const transaction = await prisma.transaction.findUnique({
     where: { id: transactionId },
     include: { collection: true },
   })
 
-  if (!transaction || transaction.collection.ownerId !== session.user.id) {
+  if (!transaction) {
     return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
   }
 
   if (transaction.matchStatus !== 'unmatched') {
-    return NextResponse.json({ error: 'This transaction is already matched' }, { status: 400 })
+    return NextResponse.json({ error: 'This payment has already been matched' }, { status: 400 })
   }
 
+  // The claimer must be an active payer in the collection this payment landed in.
   const enrollment = await prisma.enrollment.findFirst({
     where: {
-      id: parsed.data.enrollmentId,
       collectionId: transaction.collectionId,
+      payerId: userId,
       status: 'active',
     },
     include: {
@@ -51,7 +46,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   })
 
   if (!enrollment) {
-    return NextResponse.json({ error: 'Payer not found in this collection' }, { status: 404 })
+    return NextResponse.json({ error: 'You are not an active payer in this collection' }, { status: 403 })
   }
 
   const amountNGN = Number(transaction.amount)
@@ -70,8 +65,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       },
     })
 
-    // Assigning also teaches the system: the sender account from this payment
-    // binds to the payer so their future transfers auto-match (claim-and-bind).
     await bindSenderAccount(tx, {
       payerId: enrollment.payerId,
       enrollmentId: enrollment.id,
@@ -86,8 +79,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         {
           userId: transaction.collection.ownerId,
           type: 'payment_received',
-          title: 'Payment manually assigned',
-          body: `₦${amountNGN.toLocaleString()} in ${transaction.collection.name} was manually assigned to a payer`,
+          title: 'Payment claimed by a payer',
+          body: `₦${amountNGN.toLocaleString()} in ${transaction.collection.name} was claimed by ${session.user.name ?? 'a payer'}. Their sending account is now linked for automatic matching.`,
           referenceType: 'enrollment',
           referenceId: enrollment.id,
         },
@@ -95,7 +88,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           userId: enrollment.payerId,
           type: 'payment_received',
           title: 'Payment confirmed',
-          body: `Your payment of ₦${amountNGN.toLocaleString()} to ${transaction.collection.name} has been received`,
+          body: `Your payment of ₦${amountNGN.toLocaleString()} to ${transaction.collection.name} has been recorded. Future transfers from this account will match automatically.`,
           referenceType: 'enrollment',
           referenceId: enrollment.id,
         },

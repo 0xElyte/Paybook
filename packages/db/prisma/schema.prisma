@@ -197,7 +197,10 @@ model Enrollment {
   id            String           @id @default(uuid())
   collectionId  String
   payerId       String
-  bankAccountId String
+  // Optional since claim-and-bind: payers join with no bank info; the sending
+  // account binds at first payment (payer claim or owner assign), sourced from
+  // the webhook's own sender details rather than self-declared form input.
+  bankAccountId String?
   joinedAt      DateTime         // cycle start; set at successful onboarding via invite link
   status        EnrollmentStatus @default(active)
 
@@ -208,6 +211,15 @@ model Enrollment {
   exitRevokedAt   DateTime?
   exitedAt        DateTime?
 
+  // Per-payer virtual account (production strategy, NOMBA_VA_STRATEGY=per_payer).
+  // Sandbox caps VAs at 2 per account holder, so the hackathon demo runs the
+  // shared strategy (one VA per Collection + sender matching / claim-and-bind);
+  // these stay NULL there. When populated, the webhook attributes a payment to
+  // this exact enrollment by accountRef — no matching heuristics at all.
+  nombaAccountRef String? @unique // = this enrollment's id when provisioned
+  nombaAccountNo  String?
+  nombaBankName   String?
+
   // Running balance (one_time / part_payment only; installment types track per PayerInstallment)
   totalPaid     Decimal @default(0) @db.Decimal(18, 2)
   creditBalance Decimal @default(0) @db.Decimal(18, 2) // overpayment with nowhere to roll into
@@ -217,7 +229,7 @@ model Enrollment {
 
   collection        Collection        @relation(fields: [collectionId], references: [id], onDelete: Restrict)
   payer             User              @relation("EnrollmentPayer", fields: [payerId], references: [id], onDelete: Restrict)
-  bankAccount       BankAccount       @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  bankAccount       BankAccount?      @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
   payerInstallments PayerInstallment[]
   transactions      Transaction[]
 

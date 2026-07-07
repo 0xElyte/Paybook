@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import { FloatingInput } from '@/components/ui/floating-input'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,7 @@ import { phoneSchema } from '@/lib/validations/phone'
 
 export function RegisterForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [error, setError] = useState<string | null>(null)
   const [phoneError, setPhoneError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -58,11 +59,15 @@ export function RegisterForm() {
       return
     }
 
-    // Establish a session immediately so the new user lands straight on role
-    // selection instead of being bounced back through a manual login step.
+    // Establish a session immediately so the new user lands where they were
+    // headed (e.g. straight back into an invite link to auto-join) instead of
+    // being bounced through a manual login step.
     await signIn('credentials', { email, password, redirect: false })
     setLoading(false)
-    router.push('/onboarding/role')
+    const redirect = searchParams.get('redirect')
+    // Only same-origin relative paths — never redirect off-site.
+    router.push(redirect?.startsWith('/') && !redirect.startsWith('//') ? redirect : '/')
+    router.refresh()
   }
 
   return (

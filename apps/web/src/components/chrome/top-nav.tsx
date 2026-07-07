@@ -44,7 +44,9 @@ export function TopNav({
           <span className="text-lg font-extrabold tracking-tight text-text">Paybook</span>
         </Link>
 
-        {variant === 'owner' && (
+        {/* Roles were scrapped — one unified nav for everyone. `variant` is kept
+            only so existing call sites don't all need touching. */}
+        {(variant === 'owner' || variant === 'payer') && (
           <nav className="ml-2 hidden items-center gap-1 md:flex">
             {ownerLinks.map((link) => (
               <Link
@@ -82,7 +84,6 @@ export function TopNav({
               </div>
               <div className="hidden leading-tight sm:block">
                 <div className="text-[13.5px] font-bold">{userName}</div>
-                <div className="text-xs text-text-muted capitalize">{variant}</div>
               </div>
             </button>
             {menuOpen && (

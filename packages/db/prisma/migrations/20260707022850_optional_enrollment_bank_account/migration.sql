@@ -1,0 +1,1 @@
+ALTER TABLE "Enrollment" ALTER COLUMN "bankAccountId" DROP NOT NULL;

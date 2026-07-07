@@ -7,12 +7,7 @@ import { Bell } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { NotificationDrawer } from './notification-drawer'
 
-const ownerLinks = [
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/dashboard', label: 'Collections' },
-  { href: '/payouts', label: 'Payouts' },
-  { href: '/announcements', label: 'Announcements' },
-]
+const ownerLinks = [{ href: '/dashboard', label: 'Dashboard' }]
 
 function initials(name: string) {
   return name

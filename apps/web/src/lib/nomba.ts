@@ -192,14 +192,15 @@ export interface NombaVirtualAccount {
   createdAt: string
 }
 
-// The LIVE API rejects account names containing anything beyond letters and
-// digits — even spaces trip "Account name must not contain special characters"
-// (confirmed 2026-07-07; the sandbox accepted hyphens and spaces). Sanitize at
-// this boundary so no caller can trip it, padding back to the 8-char minimum
-// in case stripping shortened the name.
+// The LIVE API only accepts LETTERS AND SPACES in virtual-account names —
+// digits, hyphens, and every other character trip "Account name must not
+// contain special characters" (empirically mapped 2026-07-07: "Paybook123" and
+// "PaybookE2EDemoCollection" rejected, "Paybook Demo Ledger" accepted; the
+// sandbox accepted all of them). Sanitize at this boundary so no caller can
+// trip it, padding back to the 8-char minimum in case stripping shortened it.
 function sanitizeAccountName(name: string): string {
-  const cleaned = name.replace(/[^a-zA-Z0-9]+/g, '')
-  return (cleaned.length < 8 ? `Paybook${cleaned}` : cleaned).slice(0, 64)
+  const cleaned = name.replace(/[^a-zA-Z ]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return (cleaned.length < 8 ? `Paybook ${cleaned}` : cleaned).slice(0, 64).trim()
 }
 
 export async function createVirtualAccount(
@@ -227,7 +228,7 @@ export async function createVirtualAccount(
   // fallback (for credential sets scoped the other way around).
   const paths = ['/accounts/virtual', ...(subAccountId ? [`/accounts/virtual/${subAccountId}`] : [])]
 
-  let lastError = 'no attempt made'
+  const failures: string[] = []
   for (const path of paths) {
     const res = await nombaFetch(path, { method: 'POST', body, _ref: params.accountRef, _creds: creds })
     const text = await res.text()
@@ -242,8 +243,8 @@ export async function createVirtualAccount(
     // See issueToken() — HTTP 200 with an error `code` in the body is possible.
     if (res.ok && json?.code === '00' && json.data) return json.data
 
-    lastError = `createVirtualAccount failed at ${path}: HTTP ${res.status} — ${json ? `code ${json.code}: ${json.message ?? json.description}` : text.slice(0, 200)}`
+    failures.push(`[${path}: HTTP ${res.status} — ${json ? `code ${json.code}: ${json.message ?? json.description}` : text.slice(0, 200)}]`)
   }
 
-  throw new Error(lastError)
+  throw new Error(`createVirtualAccount failed on every endpoint: ${failures.join(' ')}`)
 }

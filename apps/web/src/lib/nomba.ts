@@ -44,7 +44,18 @@ function getRedis(): Redis | null {
 }
 
 function tokenKey(creds: NombaCredentials): string {
-  return `nomba:access_token:${creds.accountId}`
+  // Key on host + clientId too: switching environments (sandbox -> live) or
+  // rotating credentials must never reuse a stale cached token — a sandbox
+  // token on the live host fails with 403 (not 401), which the retry fallback
+  // alone wouldn't have caught.
+  const host = (() => {
+    try {
+      return new URL(process.env.NOMBA_BASE_URL!).host
+    } catch {
+      return 'unknown'
+    }
+  })()
+  return `nomba:access_token:${host}:${creds.accountId}:${creds.clientId.slice(0, 8)}`
 }
 
 async function cacheToken(creds: NombaCredentials, token: string): Promise<void> {
@@ -147,8 +158,10 @@ export async function nombaFetch(
   const token = await getNombaToken(creds)
   let res = await doFetch(token)
 
-  // Defensive fallback: if the cached token was stale/rejected, refresh once and retry
-  if (res.status === 401) {
+  // Defensive fallback: if the cached token was stale/rejected, refresh once
+  // and retry. Nomba signals a wrong-environment token with 403 (not 401), so
+  // treat both as "token problem, re-issue once".
+  if (res.status === 401 || res.status === 403) {
     const fresh = await issueToken(creds)
     res = await doFetch(fresh)
   }

@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { CollectionDetailClient } from '@/components/owner/collection-detail-client'
+import { finalizeDueExits } from '@/lib/exit'
 import type { Metadata } from 'next'
 
 interface Props {
@@ -20,6 +21,9 @@ export default async function CollectionDetailPage({ params }: Props) {
   if (!session?.user?.id) redirect('/login')
   const userId = session.user.id
 
+  // Lazy sweep: finalize any elapsed exit grace periods in this collection.
+  await finalizeDueExits({ collectionId: id })
+
   const collection = await prisma.collection.findUnique({
     where: { id, ownerId: userId },
     include: {
@@ -29,7 +33,7 @@ export default async function CollectionDetailPage({ params }: Props) {
         take: 10,
       },
       enrollments: {
-        where: { status: 'active' },
+        where: { status: { in: ['active', 'exit_pending'] } },
         include: {
           payer: { select: { fullName: true, email: true } },
           bankAccount: { select: { accountNumber: true, bankName: true } },
@@ -82,6 +86,9 @@ export default async function CollectionDetailPage({ params }: Props) {
       enrollments={collection.enrollments.map((e) => ({
         id: e.id,
         payerId: e.payerId,
+        status: e.status,
+        exitDueAt: e.exitDueAt ? e.exitDueAt.toISOString() : null,
+        exitRequestedBy: e.exitRequestedBy,
         payerName: e.payer.fullName,
         payerEmail: e.payer.email,
         bankAccount: e.bankAccount

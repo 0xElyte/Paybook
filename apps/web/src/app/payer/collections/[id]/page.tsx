@@ -11,6 +11,8 @@ import { CopyAccountButton } from '@/components/ui/copy-account-button'
 import { StatusBadge, toneForStatus } from '@/components/ui/status-badge'
 import { ClaimPaymentCard } from '@/components/payer/claim-payment-card'
 import { PayModal } from '@/components/payer/pay-modal'
+import { EnrollmentActions } from '@/components/payer/enrollment-actions'
+import { finalizeDueExits } from '@/lib/exit'
 import type { Metadata } from 'next'
 
 interface Props {
@@ -29,10 +31,13 @@ export default async function PayerCollectionDetailPage({ params }: Props) {
   if (!session?.user?.id) redirect('/login')
   const userId = session.user.id
 
+  // Lazy sweep: finalize any of this payer's exits whose grace period elapsed.
+  await finalizeDueExits({ payerId: userId })
+
   const enrollment = await prisma.enrollment.findUnique({
     where: { collectionId_payerId: { collectionId: id, payerId: userId } },
     include: {
-      collection: { include: { owner: { select: { fullName: true } } } },
+      collection: { include: { owner: { select: { fullName: true, email: true, phone: true } } } },
       bankAccount: true,
       payerInstallments: { include: { installment: true }, orderBy: { dueAt: 'asc' } },
       transactions: { orderBy: { paidAt: 'desc' }, take: 30 },
@@ -219,6 +224,19 @@ export default async function PayerCollectionDetailPage({ params }: Props) {
                 </p>
               )}
             </div>
+
+            <EnrollmentActions
+              enrollmentId={enrollment.id}
+              collectionName={collection.name}
+              status={enrollment.status}
+              exitDueAt={enrollment.exitDueAt ? enrollment.exitDueAt.toISOString() : null}
+              exitRequestedBy={enrollment.exitRequestedBy}
+              owner={{
+                name: collection.owner.fullName,
+                email: collection.owner.email,
+                phone: collection.owner.phone,
+              }}
+            />
 
             <div className="flex gap-2 rounded-[11px] border-l-[3px] border-green bg-green/[0.07] px-3.5 py-3.5">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" className="mt-0.5 shrink-0">

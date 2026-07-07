@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Megaphone, UserPlus2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Loader2, Megaphone, UserPlus2, UserRoundX } from 'lucide-react'
 import { formatNGN, formatDate } from '@/lib/utils'
 import { TopNav } from '@/components/chrome/top-nav'
 import { AutoRefresh } from '@/components/chrome/auto-refresh'
@@ -32,6 +33,9 @@ interface NextInstallment {
 interface Enrollment {
   id: string
   payerId: string
+  status: string // 'active' | 'exit_pending'
+  exitDueAt: string | null
+  exitRequestedBy: string | null
   payerName: string
   payerEmail: string
   bankAccount: string
@@ -77,11 +81,15 @@ type Tab = 'payers' | 'transactions'
 
 export function CollectionDetailClient({ collection, inviteLinks, enrollments, transactions: initialTransactions, ownerName }: Props) {
   const { addToast } = useToast()
+  const router = useRouter()
   // Land on Payers: it's the first question an owner has when opening a
   // Collection ("who's paid?"), and the old 'invite' default wasn't a rendered
   // tab at all — the panel started blank until a click.
   const [tab, setTab] = useState<Tab>('payers')
   const [broadcastOpen, setBroadcastOpen] = useState(false)
+  const [removingId, setRemovingId] = useState<string | null>(null)
+  const [exitBusyId, setExitBusyId] = useState<string | null>(null)
+  const [exitError, setExitError] = useState<string | null>(null)
   const [generatingLink, setGeneratingLink] = useState(false)
   const [linkError, setLinkError] = useState<string | null>(null)
   const [localLinks, setLocalLinks] = useState<InviteLink[]>(inviteLinks)
@@ -132,6 +140,21 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
       )
     )
     setAssigningTxId(null)
+  }
+
+  async function postExit(enrollmentId: string, path: 'exit' | 'exit/revoke', toastTitle: string, toastBody: string) {
+    setExitBusyId(enrollmentId)
+    setExitError(null)
+    const res = await fetch(`/api/enrollments/${enrollmentId}/${path}`, { method: 'POST' })
+    setExitBusyId(null)
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({ error: null }))) as { error: string | null }
+      setExitError(data.error ?? 'Something went wrong')
+      return
+    }
+    addToast(toastTitle, toastBody)
+    setRemovingId(null)
+    router.refresh()
   }
 
   async function generateInviteLink() {
@@ -239,11 +262,12 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
                   ) : (
                     <div className="overflow-x-auto">
                       <div className="min-w-[560px]">
-                        <div className="grid grid-cols-[1.4fr_0.9fr_0.9fr_0.8fr] border-b border-border px-2 py-2.5 text-xs font-bold text-text-muted">
+                        <div className="grid grid-cols-[1.4fr_0.9fr_0.9fr_0.8fr_0.5fr] border-b border-border px-2 py-2.5 text-xs font-bold text-text-muted">
                           <span>Payer</span>
                           <span>Status</span>
                           <span className="text-right">Paid</span>
                           <span className="text-right">Outstanding</span>
+                          <span className="text-right">Actions</span>
                         </div>
                         {enrollments.map((e) => {
                           const outstanding = collection.chargeAmount - e.totalPaid
@@ -253,24 +277,99 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
                               ? 'green'
                               : 'gray'
                           const label = e.nextInstallment ? e.nextInstallment.status : outstanding <= 0 ? 'paid' : 'pending'
+                          const exitDaysLeft = e.exitDueAt
+                            ? Math.max(0, Math.ceil((new Date(e.exitDueAt).getTime() - Date.now()) / 86_400_000))
+                            : null
                           return (
-                            <div key={e.id} className="grid grid-cols-[1.4fr_0.9fr_0.9fr_0.8fr] items-center border-b border-fill px-2 py-3.5 transition-colors hover:bg-card-subtle">
-                              <div className="flex items-center gap-2.5">
-                                <span className="grid h-8 w-8 place-items-center rounded-full bg-fill text-xs font-bold text-text-2">
-                                  {e.payerName.slice(0, 1).toUpperCase()}
-                                </span>
-                                <div>
-                                  <div className="text-[13.5px] font-bold">{e.payerName}</div>
-                                  <div className="text-[11.5px] text-text-faint">Joined {formatDate(e.joinedAt)}</div>
+                            <div key={e.id} className="border-b border-fill px-2 py-3.5 transition-colors hover:bg-card-subtle">
+                              <div className="grid grid-cols-[1.4fr_0.9fr_0.9fr_0.8fr_0.5fr] items-center">
+                                <div className="flex items-center gap-2.5">
+                                  <span className="grid h-8 w-8 place-items-center rounded-full bg-fill text-xs font-bold text-text-2">
+                                    {e.payerName.slice(0, 1).toUpperCase()}
+                                  </span>
+                                  <div>
+                                    <div className="text-[13.5px] font-bold">{e.payerName}</div>
+                                    <div className="text-[11.5px] text-text-faint">Joined {formatDate(e.joinedAt)}</div>
+                                  </div>
                                 </div>
+                                <span className="flex flex-col items-start gap-1">
+                                  <StatusBadge label={label} tone={tone} pulse={label === 'overdue'} />
+                                  {e.status === 'exit_pending' && (
+                                    <StatusBadge
+                                      label={`${e.exitRequestedBy === 'owner' ? 'removal' : 'exit'} in ${exitDaysLeft}d`}
+                                      tone="amber"
+                                    />
+                                  )}
+                                </span>
+                                <span className="text-right font-mono text-[13px] font-bold">{formatNGN(e.totalPaid)}</span>
+                                <span className="text-right font-mono text-[13px] font-bold text-text-muted">
+                                  {formatNGN(Math.max(0, outstanding))}
+                                </span>
+                                <span className="text-right">
+                                  {e.status === 'active' ? (
+                                    <button
+                                      type="button"
+                                      title="Remove payer"
+                                      onClick={() => {
+                                        setExitError(null)
+                                        setRemovingId(removingId === e.id ? null : e.id)
+                                      }}
+                                      className="rounded-[8px] p-1.5 text-text-faint transition-colors hover:bg-red/[0.08] hover:text-red-text"
+                                    >
+                                      <UserRoundX size={16} />
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      disabled={exitBusyId === e.id}
+                                      onClick={() =>
+                                        postExit(e.id, 'exit/revoke', 'Removal revoked', `${e.payerName} remains an active payer.`)
+                                      }
+                                      className="text-xs font-bold text-green-text-2 hover:underline disabled:opacity-60"
+                                    >
+                                      {exitBusyId === e.id ? '…' : 'Revoke'}
+                                    </button>
+                                  )}
+                                </span>
                               </div>
-                              <span>
-                                <StatusBadge label={label} tone={tone} pulse={label === 'overdue'} />
-                              </span>
-                              <span className="text-right font-mono text-[13px] font-bold">{formatNGN(e.totalPaid)}</span>
-                              <span className="text-right font-mono text-[13px] font-bold text-text-muted">
-                                {formatNGN(Math.max(0, outstanding))}
-                              </span>
+
+                              {removingId === e.id && e.status === 'active' && (
+                                <div className="animate-float-up mt-3 rounded-[10px] border border-red/25 bg-red/[0.04] p-3.5">
+                                  <p className="mb-2.5 text-[12.5px] leading-snug text-text-2">
+                                    Remove <span className="font-bold">{e.payerName}</span> from this collection? They&apos;ll
+                                    be notified, and the removal finalizes in <span className="font-bold">7 days</span> unless
+                                    revoked.
+                                    {outstanding > 0 && (
+                                      <span className="mt-1 block font-bold text-red-text">
+                                        Unresolved balance: {formatNGN(outstanding)} — removal doesn&apos;t erase what&apos;s owed.
+                                      </span>
+                                    )}
+                                  </p>
+                                  {exitError && (
+                                    <p className="mb-2.5 rounded-lg bg-red/10 px-3 py-2 text-[12px] text-red-text">{exitError}</p>
+                                  )}
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setRemovingId(null)}
+                                      className="h-9 rounded-[9px] border-[1.5px] border-border bg-card px-3.5 text-[12.5px] font-bold text-text-2"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={exitBusyId === e.id}
+                                      onClick={() =>
+                                        postExit(e.id, 'exit', 'Removal initiated', `${e.payerName} has been notified. Finalizes in 7 days unless revoked.`)
+                                      }
+                                      className="flex h-9 items-center gap-1.5 rounded-[9px] bg-red px-3.5 text-[12.5px] font-extrabold text-white disabled:opacity-60"
+                                    >
+                                      {exitBusyId === e.id && <Loader2 size={13} className="animate-spin" />}
+                                      Remove payer
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )
                         })}

@@ -8,6 +8,7 @@ import { formatNGN, formatDate } from '@/lib/utils'
 import { TopNav } from '@/components/chrome/top-nav'
 import { AutoRefresh } from '@/components/chrome/auto-refresh'
 import { DashboardTabs } from '@/components/chrome/dashboard-tabs'
+import { finalizeDueExits } from '@/lib/exit'
 import { AnimatedCounter } from '@/components/ui/animated-counter'
 import { MonoAccountNumber } from '@/components/ui/mono-account-number'
 import { StatusBadge, toneForStatus } from '@/components/ui/status-badge'
@@ -36,6 +37,12 @@ export default async function HomePage() {
   if (!session?.user?.id) redirect('/login?callbackUrl=/dashboard')
 
   const userId = session.user.id
+
+  // Lazy sweep: finalize elapsed exit grace periods on both sides of this user.
+  await Promise.all([
+    finalizeDueExits({ payerId: userId }),
+    finalizeDueExits({ collectionOwnerId: userId }),
+  ])
 
   const [collections, enrollments, recentActivity] = await Promise.all([
     prisma.collection.findMany({

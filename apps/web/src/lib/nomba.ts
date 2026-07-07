@@ -230,9 +230,10 @@ export async function createVirtualAccount(
   for (const path of paths) {
     const res = await nombaFetch(path, { method: 'POST', body, _ref: params.accountRef, _creds: creds })
     const text = await res.text()
-    let json: { code?: string; description?: string; message?: string; data?: NombaVirtualAccount } | null = null
+    type VaResponse = { code?: string; description?: string; message?: string; data?: NombaVirtualAccount }
+    let json: VaResponse | null = null
     try {
-      json = JSON.parse(text) as typeof json
+      json = JSON.parse(text) as VaResponse
     } catch {
       /* non-JSON error body — handled below */
     }

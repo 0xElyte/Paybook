@@ -39,7 +39,36 @@ export const collectionSchema = z
         path: ['installments'],
       })
     }
+
+    // Installments are strictly sequential in time: each installment's due-after
+    // period (from the payer's joinedAt) must be >= the sum of the due-after
+    // periods of all installments before it (SCHEMA.md, Installment rules).
+    let cumulativeDays = 0
+    for (let i = 0; i < data.installments.length; i++) {
+      const inst = data.installments[i]
+      const days = toDays(inst.dueAfterValue, inst.dueAfterUnit)
+      if (i > 0 && days < cumulativeDays) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Installment ${i + 1} is due before the installments preceding it — due dates must be sequential`,
+          path: ['installments', i, 'dueAfterValue'],
+        })
+        return
+      }
+      cumulativeDays += days
+    }
   })
+
+const DAYS_PER_UNIT: Record<(typeof durationUnits)[number], number> = {
+  days: 1,
+  weeks: 7,
+  months: 30,
+  years: 365,
+}
+
+function toDays(value: number, unit: (typeof durationUnits)[number]): number {
+  return value * DAYS_PER_UNIT[unit]
+}
 
 export type CollectionInput = z.infer<typeof collectionSchema>
 export type InstallmentInput = z.infer<typeof installmentSchema>

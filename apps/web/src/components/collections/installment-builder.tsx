@@ -14,6 +14,21 @@ export function emptyInstallment(percentage = 0): InstallmentInput {
   return { percentage, dueAfterValue: 30, dueAfterUnit: 'days' }
 }
 
+const DAYS_PER_UNIT: Record<InstallmentInput['dueAfterUnit'], number> = {
+  days: 1,
+  weeks: 7,
+  months: 30,
+  years: 365,
+}
+
+// Installments must be sequential in time (each due-after >= the sum of all
+// previous due-afters — enforced server-side), so a new row's default due date
+// must land after the whole existing schedule, not at a fixed 30 days.
+function nextSequentialInstallment(existing: InstallmentInput[], percentage: number): InstallmentInput {
+  const cumulativeDays = existing.reduce((sum, i) => sum + i.dueAfterValue * DAYS_PER_UNIT[i.dueAfterUnit], 0)
+  return { percentage, dueAfterValue: cumulativeDays + 30, dueAfterUnit: 'days' }
+}
+
 export function InstallmentBuilder({
   installments,
   onChange,
@@ -74,7 +89,7 @@ export function InstallmentBuilder({
   function add() {
     if (installments.length >= MAX_INSTALLMENTS) return
     const remaining = Math.max(0, 100 - total)
-    onChange([...installments, emptyInstallment(Math.round(remaining))])
+    onChange([...installments, nextSequentialInstallment(installments, Math.round(remaining))])
   }
 
   // Donut chart segments

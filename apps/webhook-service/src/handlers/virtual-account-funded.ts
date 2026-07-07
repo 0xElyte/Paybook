@@ -1,19 +1,51 @@
 import type { Request, Response } from 'express'
-import { prisma } from '@paybook/db'
+import { Prisma, prisma } from '@paybook/db'
 import { applyPayment } from '@paybook/db/payment-application'
 import { verifyNombaSignature } from '../lib/verify-signature'
 import { parseFundedEvent } from '../lib/extract-funded-event'
-import { fromKobo } from '../lib/kobo'
 import { logger } from '../lib/logger'
 
 export async function handleVirtualAccountFunded(req: Request, res: Response) {
+  try {
+    await processWebhook(req, res)
+  } catch (err) {
+    // Unique-constraint violation on nombaRequestId = a concurrent duplicate
+    // delivery raced past the idempotency pre-check. The payment is already
+    // recorded — acknowledge so Nomba stops retrying.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      logger.info('webhook.duplicate_race', {})
+      res.sendStatus(200)
+      return
+    }
+    logger.error('webhook.processing_error', {
+      error: err instanceof Error ? err.message : 'unknown error',
+    })
+    // Non-2xx → Nomba retries with backoff, which is what we want for a
+    // transient failure (e.g. DB briefly unreachable).
+    res.sendStatus(500)
+  }
+}
+
+async function processWebhook(req: Request, res: Response) {
   const rawBody = req.body as Buffer
   const signature = req.header('nomba-signature') ?? req.header('nomba-sig-value')
+  const timestamp = req.header('nomba-timestamp')
+
+  // Parse before verifying: Nomba's documented signature scheme is computed over
+  // specific payload fields (+ the nomba-timestamp header), not the raw body.
+  let raw: unknown
+  try {
+    raw = JSON.parse(rawBody.toString())
+  } catch {
+    logger.warn('webhook.unparseable_body', { bodyPrefix: rawBody.toString().slice(0, 200) })
+    res.status(400).send('invalid JSON')
+    return
+  }
 
   // ── Step 1: Verify signature — reject immediately if invalid ────────────────
   let signatureValid = false
   try {
-    signatureValid = verifyNombaSignature(rawBody, signature)
+    signatureValid = verifyNombaSignature({ rawBody, payload: raw, signature, timestamp })
   } catch (err) {
     logger.error('webhook.signature_config_error', {
       error: err instanceof Error ? err.message : 'unknown error',
@@ -26,16 +58,16 @@ export async function handleVirtualAccountFunded(req: Request, res: Response) {
     logger.warn('webhook.signature_invalid', {
       path: req.path,
       signature: signature ? signature.slice(0, 8) + '…' : undefined,
+      hasTimestamp: !!timestamp,
     })
     res.status(401).send('bad signature')
     return
   }
 
-  const raw = JSON.parse(rawBody.toString())
   const event = parseFundedEvent(raw)
 
   // Log the full raw payload on every delivery — this is how the first real
-  // virtual_account.funded delivery gets inspected to confirm field paths
+  // payment_success delivery gets inspected to confirm field paths
   // (see refs/docs/NOMBA_INTEGRATION.md, Section 5, outstanding checkpoint).
   logger.info('webhook.received', { eventType: event.eventType, raw })
 
@@ -87,19 +119,31 @@ export async function handleVirtualAccountFunded(req: Request, res: Response) {
   const senderAccountNumber = event.senderAccountNumber
   const senderName = event.senderName ?? 'Unknown'
   const senderBank = event.senderBank ?? 'Unknown'
-  const amountNGN = fromKobo(event.rawAmount)
+  // The documented payment_success example carries transactionAmount in NAIRA
+  // (decimals like 120 / fee 0.6) — NOT kobo. Do not divide by 100 here.
+  const amountNGN = Number(event.rawAmount)
   const paidAt = event.paidAt ? new Date(event.paidAt) : new Date()
   const narration = event.narration ?? null
+
+  if (!Number.isFinite(amountNGN) || amountNGN <= 0) {
+    logger.error('webhook.invalid_amount', { requestId: event.requestId, rawAmount: event.rawAmount })
+    res.sendStatus(200)
+    return
+  }
 
   // ── Step 4: Find which Collection received this payment ─────────────────────
   // Prefer accountRef (== Collection.id, set at virtual account creation — exact,
   // stable join key). Fall back to the bank account number if this payload shape
   // doesn't carry accountRef.
-  const collection = event.accountRef
-    ? await prisma.collection.findUnique({ where: { nombaAccountRef: event.accountRef } })
-    : await prisma.collection.findFirst({
-        where: { nombaAccountNo: event.receivingAccountNumber },
-      })
+  const collection =
+    (event.accountRef
+      ? await prisma.collection.findUnique({ where: { nombaAccountRef: event.accountRef } })
+      : null) ??
+    (event.receivingAccountNumber
+      ? await prisma.collection.findFirst({
+          where: { nombaAccountNo: event.receivingAccountNumber },
+        })
+      : null)
 
   if (!collection) {
     logger.error('webhook.collection_not_found', {

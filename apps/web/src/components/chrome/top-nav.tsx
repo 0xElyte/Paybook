@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Bell } from 'lucide-react'
@@ -30,6 +30,25 @@ export function TopNav({
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  // Unread badge: fetch on mount, refresh every 30s, clear when the drawer
+  // opens (the drawer marks everything read server-side).
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const res = await fetch('/api/notifications').catch(() => null)
+      if (!res?.ok || cancelled) return
+      const data = (await res.json()) as { unreadCount: number }
+      if (!cancelled) setUnreadCount(data.unreadCount)
+    }
+    void load()
+    const interval = setInterval(load, 30_000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
 
   return (
     <>
@@ -62,11 +81,19 @@ export function TopNav({
         <div className="ml-auto flex items-center gap-3.5">
           <button
             type="button"
-            onClick={() => setDrawerOpen(true)}
+            onClick={() => {
+              setDrawerOpen(true)
+              setUnreadCount(0)
+            }}
             aria-label="Notifications"
             className="relative grid h-10 w-10 place-items-center rounded-[11px] text-text-2 transition-colors hover:bg-fill"
           >
             <Bell size={21} strokeWidth={1.8} />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 grid h-[17px] min-w-[17px] place-items-center rounded-pill bg-green px-1 text-[10px] font-extrabold text-navy">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </button>
           <div className="relative">
             <button

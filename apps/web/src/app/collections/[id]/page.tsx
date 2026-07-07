@@ -81,6 +81,7 @@ export default async function CollectionDetailPage({ params }: Props) {
       }))}
       enrollments={collection.enrollments.map((e) => ({
         id: e.id,
+        payerId: e.payerId,
         payerName: e.payer.fullName,
         payerEmail: e.payer.email,
         bankAccount: e.bankAccount

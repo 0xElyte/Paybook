@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { UserPlus2 } from 'lucide-react'
+import { Megaphone, UserPlus2 } from 'lucide-react'
 import { formatNGN, formatDate } from '@/lib/utils'
 import { TopNav } from '@/components/chrome/top-nav'
 import { AutoRefresh } from '@/components/chrome/auto-refresh'
@@ -10,6 +10,7 @@ import { MonoAccountNumber } from '@/components/ui/mono-account-number'
 import { StatusBadge, toneForStatus } from '@/components/ui/status-badge'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
+import { BroadcastModal } from './broadcast-modal'
 
 interface InviteLink {
   id: string
@@ -30,6 +31,7 @@ interface NextInstallment {
 
 interface Enrollment {
   id: string
+  payerId: string
   payerName: string
   payerEmail: string
   bankAccount: string
@@ -79,6 +81,7 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
   // Collection ("who's paid?"), and the old 'invite' default wasn't a rendered
   // tab at all — the panel started blank until a click.
   const [tab, setTab] = useState<Tab>('payers')
+  const [broadcastOpen, setBroadcastOpen] = useState(false)
   const [generatingLink, setGeneratingLink] = useState(false)
   const [linkError, setLinkError] = useState<string | null>(null)
   const [localLinks, setLocalLinks] = useState<InviteLink[]>(inviteLinks)
@@ -176,6 +179,13 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
       <TopNav variant="owner" userName={ownerName} />
       <AutoRefresh />
 
+      <BroadcastModal
+        collectionId={collection.id}
+        payers={enrollments.map((e) => ({ payerId: e.payerId, payerName: e.payerName }))}
+        open={broadcastOpen}
+        onClose={() => setBroadcastOpen(false)}
+      />
+
       <main className="relative z-10 mx-auto max-w-[1040px] px-6 py-7 pb-20">
         <Link href="/dashboard" className="mb-[18px] flex w-fit items-center gap-1.5 text-sm font-bold text-text-2 hover:text-text">
           ← Back to dashboard
@@ -189,9 +199,19 @@ export function CollectionDetailClient({ collection, inviteLinks, enrollments, t
               <span className="text-xs text-text-faint">· {collection.nombaBankName}</span>
             </div>
           </div>
-          <div className="rounded-[14px] bg-navy px-5 py-3.5 text-right text-white">
-            <div className="mb-0.5 text-[11.5px] text-text-faint">Total collected</div>
-            <div className="font-mono text-xl font-extrabold text-green">{formatNGN(totalCollected)}</div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setBroadcastOpen(true)}
+              className="flex h-11 items-center gap-2 rounded-control border-[1.5px] border-border bg-card px-[18px] text-[14px] font-bold text-navy transition-all hover:scale-[1.02] hover:shadow-[0_8px_20px_rgba(15,28,63,0.08)] active:scale-[0.97]"
+            >
+              <Megaphone size={16} />
+              Broadcast
+            </button>
+            <div className="rounded-[14px] bg-navy px-5 py-3.5 text-right text-white">
+              <div className="mb-0.5 text-[11.5px] text-text-faint">Total collected</div>
+              <div className="font-mono text-xl font-extrabold text-green">{formatNGN(totalCollected)}</div>
+            </div>
           </div>
         </div>
 

@@ -71,11 +71,14 @@ interface Props {
   ownerName: string
 }
 
-type Tab = 'payers' | 'transactions' | 'invite'
+type Tab = 'payers' | 'transactions'
 
 export function CollectionDetailClient({ collection, inviteLinks, enrollments, transactions: initialTransactions, ownerName }: Props) {
   const { addToast } = useToast()
-  const [tab, setTab] = useState<Tab>('invite')
+  // Land on Payers: it's the first question an owner has when opening a
+  // Collection ("who's paid?"), and the old 'invite' default wasn't a rendered
+  // tab at all — the panel started blank until a click.
+  const [tab, setTab] = useState<Tab>('payers')
   const [generatingLink, setGeneratingLink] = useState(false)
   const [linkError, setLinkError] = useState<string | null>(null)
   const [localLinks, setLocalLinks] = useState<InviteLink[]>(inviteLinks)

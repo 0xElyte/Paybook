@@ -24,6 +24,17 @@ export async function POST(req: Request) {
   const { name, description, chargeAmount, durationValue, durationUnit, repaymentType, installments, nombaSubAccountId } =
     parsed.data
 
+  // JWT sessions can outlive their User row (e.g. after a data reset) — check
+  // before creating anything keyed on the owner, or the collection insert dies
+  // on an FK violation AFTER the virtual account has already been provisioned.
+  const userExists = await prisma.user.findUnique({ where: { id: session.user.id }, select: { id: true } })
+  if (!userExists) {
+    return NextResponse.json(
+      { error: 'Your login session is no longer valid. Please log out and sign in (or register) again.' },
+      { status: 401 }
+    )
+  }
+
   // Production model: the owner's own bound Nomba account signs the virtual
   // account creation, so payments land with them. Binding is required before
   // creating a Collection (env credentials only back pre-binding demo rows).

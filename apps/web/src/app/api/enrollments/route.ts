@@ -30,6 +30,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
   }
 
+  // JWT sessions can outlive their User row (e.g. after a data reset). Catch it
+  // here so the invite page can sign the ghost session out and show the login
+  // step, instead of the enrollment insert dying on an FK violation.
+  const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+  if (!userExists) {
+    return NextResponse.json(
+      { error: 'Your login session is no longer valid. Please sign in again.', code: 'STALE_SESSION' },
+      { status: 401 }
+    )
+  }
+
   const link = await prisma.inviteLink.findUnique({
     where: { token: parsed.data.inviteToken },
     include: {

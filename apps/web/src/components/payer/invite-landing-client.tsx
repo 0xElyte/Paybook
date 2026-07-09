@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useSession, signIn } from 'next-auth/react'
+import { useSession, signIn, signOut } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { formatNGN } from '@/lib/utils'
 import { FloatingInput } from '@/components/ui/floating-input'
@@ -73,6 +73,16 @@ export function InviteLandingClient({ link, collection }: Props) {
 
     if (!res.ok) {
       const { error: msg } = (await res.json().catch(() => ({ error: null }))) as { error: string | null }
+      if (res.status === 401) {
+        // No valid account behind this session (signed out, or a stale JWT
+        // whose user no longer exists). Clear the dead cookie and show the
+        // sign-in step — the invite context is preserved, so they're one tap
+        // from joining once they're in.
+        await signOut({ redirect: false })
+        setError('You need to sign in or create an account to join this collection.')
+        setStep('login_or_register')
+        return
+      }
       if (res.status === 409) {
         // Already enrolled — not an error worth stranding them on; take them home.
         addToast('Already joined', `You're already a member of ${collection.name}.`)
@@ -196,9 +206,19 @@ export function InviteLandingClient({ link, collection }: Props) {
           extra steps.
         </p>
 
+        {error && error !== 'Invalid email or password' && (
+          <p className="mb-4 rounded-lg bg-amber/[0.12] px-3 py-2 text-sm text-amber-text">{error}</p>
+        )}
+
         <form onSubmit={handleLoginAndContinue} className="space-y-4">
           <FloatingInput name="email" type="email" label="Email" required />
-          <FloatingInput name="password" type="password" label="Password" required error={error ?? undefined} />
+          <FloatingInput
+            name="password"
+            type="password"
+            label="Password"
+            required
+            error={error === 'Invalid email or password' ? error : undefined}
+          />
           <Button type="submit" variant="navy" disabled={loading} className="w-full">
             {loading ? 'Signing in…' : 'Sign in & join'}
           </Button>
